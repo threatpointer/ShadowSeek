@@ -1,0 +1,3 @@
+@echo off
+echo Starting Ghidra Bridge...
+python start_ghidra_bridge.py
