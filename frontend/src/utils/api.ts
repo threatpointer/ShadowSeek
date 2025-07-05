@@ -399,6 +399,11 @@ class ApiClient {
     return response.data;
   }
 
+  async getBinaryComparisonResults(taskId: string): Promise<any> {
+    const response = await api.get(`/analysis/diff/${taskId}`);
+    return response.data;
+  }
+
   async searchPatterns(
     binaryId: string,
     patternTypes: string[] = ['crypto', 'dangerous_functions', 'strings']
