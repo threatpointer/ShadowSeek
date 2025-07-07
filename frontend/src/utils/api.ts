@@ -755,7 +755,7 @@ class ApiClient {
     try {
       const findings = await this.getSecurityFindings(binaryId, { perPage: 1000 });
       const summary = {
-        total: findings.total_findings || 0,
+        total: 0, // Will be calculated after counting all findings
         critical: 0,
         high: 0,
         medium: 0,
@@ -782,6 +782,9 @@ class ApiClient {
           else if (confidence >= 50) summary.confidence_distribution.medium++;
           else summary.confidence_distribution.low++;
         });
+
+        // Calculate total as sum of all severity counts
+        summary.total = summary.critical + summary.high + summary.medium + summary.low + summary.info;
 
         // Calculate overall risk score based on findings and confidence
         const riskWeight = {

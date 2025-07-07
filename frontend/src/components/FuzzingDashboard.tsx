@@ -98,13 +98,6 @@ interface FuzzingHarness {
 
 interface FuzzingSummary {
   total: number;
-  ready: number;
-  generated: number;
-  compiled: number;
-  tested: number;
-  error: number;
-  total_coverage: number;
-  total_crashes: number;
   harness_distribution: {
     afl: number;
     aflplusplus: number;
@@ -153,8 +146,9 @@ const FuzzingDashboard: React.FC<FuzzingDashboardProps> = ({ binaryId }) => {
   const fetchBinaries = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiClient.getFuzzingReadyBinaries();
-      setBinaries(response.fuzzing_ready_binaries || []);
+      // Get all binaries instead of just fuzzing-ready ones
+      const response = await apiClient.getBinaries(1, 100);
+      setBinaries(response.binaries || []);
       setError(null);
     } catch (err: any) {
       const errorMessage = err.response?.data?.error || err.message || 'Failed to load binaries';
@@ -201,13 +195,6 @@ const FuzzingDashboard: React.FC<FuzzingDashboardProps> = ({ binaryId }) => {
         setHarnesses([]);
         setSummary({
           total: 0,
-          ready: 0,
-          generated: 0,
-          compiled: 0,
-          tested: 0,
-          error: 0,
-          total_coverage: 0,
-          total_crashes: 0,
           harness_distribution: { afl: 0, aflplusplus: 0, libfuzzer: 0, honggfuzz: 0 }
         });
         return;
@@ -240,13 +227,6 @@ const FuzzingDashboard: React.FC<FuzzingDashboardProps> = ({ binaryId }) => {
              // Generate summary
        const summary: FuzzingSummary = {
          total: filteredHarnesses.length,
-         ready: filteredHarnesses.filter((h: FuzzingHarness) => h.status === 'ready').length,
-         generated: filteredHarnesses.filter((h: FuzzingHarness) => h.status === 'generated').length,
-         compiled: filteredHarnesses.filter((h: FuzzingHarness) => h.status === 'compiled').length,
-         tested: filteredHarnesses.filter((h: FuzzingHarness) => h.status === 'tested').length,
-         error: filteredHarnesses.filter((h: FuzzingHarness) => h.status === 'error').length,
-         total_coverage: filteredHarnesses.reduce((sum: number, h: FuzzingHarness) => sum + (h.performance_metrics?.code_coverage || 0), 0),
-         total_crashes: filteredHarnesses.reduce((sum: number, h: FuzzingHarness) => sum + (h.performance_metrics?.crashes_found || 0), 0),
          harness_distribution: {
            afl: filteredHarnesses.filter((h: FuzzingHarness) => h.harness_type === 'AFL').length,
            aflplusplus: filteredHarnesses.filter((h: FuzzingHarness) => h.harness_type === 'AFL++').length,
@@ -266,13 +246,6 @@ const FuzzingDashboard: React.FC<FuzzingDashboardProps> = ({ binaryId }) => {
        setHarnesses([]);
        setSummary({
          total: 0,
-         ready: 0,
-         generated: 0,
-         compiled: 0,
-         tested: 0,
-         error: 0,
-         total_coverage: 0,
-         total_crashes: 0,
          harness_distribution: { afl: 0, aflplusplus: 0, libfuzzer: 0, honggfuzz: 0 }
        });
      } finally {
@@ -381,10 +354,29 @@ const FuzzingDashboard: React.FC<FuzzingDashboardProps> = ({ binaryId }) => {
       return;
     }
 
-    const isReady = ['decompiled', 'analyzed', 'completed'].includes(selectedBinaryData.analysis_status);
-    if (!isReady) {
-      toast.error(`Cannot generate fuzzing harness for binary with status '${selectedBinaryData.analysis_status}'. Binary must have decompiled functions.`);
-      return;
+    // Provide helpful guidance based on binary status
+    const status = selectedBinaryData.analysis_status.toLowerCase();
+    switch (status) {
+      case 'pending':
+        toast.warning('This binary is still pending initial analysis. Please wait for basic analysis to complete before generating fuzzing harnesses.');
+        return;
+      case 'analyzing':
+      case 'processing':
+        toast.warning('This binary is currently being analyzed. Please wait for the current analysis to complete before generating fuzzing harnesses.');
+        return;
+      case 'failed':
+      case 'error':
+        toast.error('This binary failed analysis and cannot be used for fuzzing. Try re-uploading the binary.');
+        return;
+      case 'decompiled':
+      case 'completed':
+      case 'analyzed':
+        // These are good to proceed with fuzzing
+        break;
+      default:
+        // For any other status, allow the generation but warn the user
+        toast.warning(`Binary status is '${selectedBinaryData.analysis_status}'. Fuzzing harness generation will proceed but results may be limited.`);
+        break;
     }
 
     try {
@@ -483,12 +475,21 @@ const FuzzingDashboard: React.FC<FuzzingDashboardProps> = ({ binaryId }) => {
   const renderFuzzingMetrics = () => {
     if (!summary) return null;
 
+    // Use harnesses array directly instead of summary for status distribution
+    const statusCounts = {
+      ready: harnesses.filter((h: FuzzingHarness) => h.status === 'ready').length,
+      tested: harnesses.filter((h: FuzzingHarness) => h.status === 'tested').length,
+      compiled: harnesses.filter((h: FuzzingHarness) => h.status === 'compiled').length,
+      generated: harnesses.filter((h: FuzzingHarness) => h.status === 'generated').length,
+      error: harnesses.filter((h: FuzzingHarness) => h.status === 'error').length
+    };
+
     const statusData = [
-      { name: 'Ready', value: summary.ready, color: '#4caf50' },
-      { name: 'Tested', value: summary.tested, color: '#2196f3' },
-      { name: 'Compiled', value: summary.compiled, color: '#ff9800' },
-      { name: 'Generated', value: summary.generated, color: '#9c27b0' },
-      { name: 'Error', value: summary.error, color: '#f44336' }
+      { name: 'Ready', value: statusCounts.ready, color: '#4caf50' },
+      { name: 'Tested', value: statusCounts.tested, color: '#2196f3' },
+      { name: 'Compiled', value: statusCounts.compiled, color: '#ff9800' },
+      { name: 'Generated', value: statusCounts.generated, color: '#9c27b0' },
+      { name: 'Error', value: statusCounts.error, color: '#f44336' }
     ].filter(item => item.value > 0);
 
     const harnessTypeData = [
@@ -505,78 +506,16 @@ const FuzzingDashboard: React.FC<FuzzingDashboardProps> = ({ binaryId }) => {
           <Grid item xs={12} md={2}>
             <Card sx={{ 
               background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white'
+              color: 'white',
+              boxShadow: '0 4px 20px rgba(102, 126, 234, 0.4)',
+              borderRadius: '8px'
             }}>
               <CardContent sx={{ textAlign: 'center', py: 2 }}>
-                <Typography variant="h3" fontWeight="bold">
+                <Typography variant="h3" fontWeight="700" sx={{ textShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>
                   {summary.total}
                 </Typography>
-                <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                <Typography variant="body2" sx={{ opacity: 0.95, fontWeight: '500' }}>
                   Total Harnesses
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          
-          <Grid item xs={12} md={2.5}>
-            <Card sx={{ 
-              background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-              color: 'white'
-            }}>
-              <CardContent sx={{ textAlign: 'center', py: 2 }}>
-                <Typography variant="h3" fontWeight="bold">
-                  {summary.ready}
-                </Typography>
-                <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                  Ready to Fuzz
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          
-          <Grid item xs={12} md={2.5}>
-            <Card sx={{ 
-              background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-              color: 'white'
-            }}>
-              <CardContent sx={{ textAlign: 'center', py: 2 }}>
-                <Typography variant="h3" fontWeight="bold">
-                  {Math.round(summary.total_coverage / Math.max(1, summary.total))}%
-                </Typography>
-                <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                  Avg Coverage
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          
-          <Grid item xs={12} md={2.5}>
-            <Card sx={{ 
-              background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
-              color: 'white'
-            }}>
-              <CardContent sx={{ textAlign: 'center', py: 2 }}>
-                <Typography variant="h3" fontWeight="bold">
-                  {summary.total_crashes}
-                </Typography>
-                <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                  Crashes Found
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          
-          <Grid item xs={12} md={2.5}>
-            <Card sx={{ 
-              background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
-              color: 'white'
-            }}>
-              <CardContent sx={{ textAlign: 'center', py: 2 }}>
-                <Typography variant="h3" fontWeight="bold">
-                  {harnesses.filter((h: FuzzingHarness) => h.generation_method === 'AI').length}
-                </Typography>
-                <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                  AI-Generated
                 </Typography>
               </CardContent>
             </Card>
@@ -1000,8 +939,27 @@ const FuzzingDashboard: React.FC<FuzzingDashboardProps> = ({ binaryId }) => {
               >
                 {binaries.map((binary) => {
                   const isReady = ['decompiled', 'analyzed', 'completed'].includes(binary.analysis_status);
+                  const getStatusColor = (status: string) => {
+                    switch (status.toLowerCase()) {
+                      case 'decompiled':
+                      case 'completed':
+                      case 'analyzed':
+                        return 'success';
+                      case 'analyzing':
+                      case 'processing':
+                        return 'warning';
+                      case 'pending':
+                        return 'info';
+                      case 'failed':
+                      case 'error':
+                        return 'error';
+                      default:
+                        return 'default';
+                    }
+                  };
+                  
                   return (
-                    <MenuItem key={binary.id} value={binary.id} disabled={!isReady}>
+                    <MenuItem key={binary.id} value={binary.id}>
                       <Box display="flex" alignItems="center" justifyContent="space-between" width="100%">
                         <Box display="flex" alignItems="center" gap={1}>
                           <BugReport />
@@ -1010,11 +968,7 @@ const FuzzingDashboard: React.FC<FuzzingDashboardProps> = ({ binaryId }) => {
                         <Chip 
                           size="small" 
                           label={binary.analysis_status}
-                          color={
-                            isReady ? 'success' : 
-                            binary.analysis_status === 'analyzing' || binary.analysis_status === 'processing' ? 'warning' : 
-                            'error'
-                          }
+                          color={getStatusColor(binary.analysis_status)}
                           sx={{ ml: 1 }}
                         />
                       </Box>
@@ -1025,7 +979,8 @@ const FuzzingDashboard: React.FC<FuzzingDashboardProps> = ({ binaryId }) => {
             </FormControl>
             {binaries.length > 0 && (
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                <strong>Status Guide:</strong> Only binaries with decompiled functions can be used for fuzzing.
+                <strong>All Binaries Available:</strong> You can select any binary for fuzzing. 
+                The system will provide appropriate guidance based on the binary's current analysis status.
               </Typography>
             )}
           </Grid>
@@ -1033,8 +988,7 @@ const FuzzingDashboard: React.FC<FuzzingDashboardProps> = ({ binaryId }) => {
           <Grid item xs={12} md={6}>
             {(() => {
               const selectedBinaryData = binaries.find(b => b.id === selectedBinary);
-              const isReady = selectedBinaryData ? ['decompiled', 'analyzed', 'completed'].includes(selectedBinaryData.analysis_status) : false;
-              const isDisabled = !selectedBinary || generationRunning || !isReady || selectedFuzzers.length === 0;
+              const isDisabled = !selectedBinary || generationRunning || selectedFuzzers.length === 0;
               
               return (
                 <Button
@@ -1055,11 +1009,9 @@ const FuzzingDashboard: React.FC<FuzzingDashboardProps> = ({ binaryId }) => {
                     ? 'Generating Harness...' 
                     : !selectedBinary 
                       ? 'Select Binary First' 
-                      : !isReady 
-                        ? `Cannot Generate (${selectedBinaryData?.analysis_status})` 
-                        : selectedFuzzers.length === 0
-                          ? 'Select Fuzzer(s) First'
-                          : `Generate ${selectedFuzzers.length} Fuzzing Harness(es)`}
+                      : selectedFuzzers.length === 0
+                        ? 'Select Fuzzer(s) First'
+                        : `Generate ${selectedFuzzers.length} Fuzzing Harness(es)`}
                 </Button>
               );
             })()}

@@ -273,12 +273,17 @@ const UnifiedSecurityDashboard: React.FC<UnifiedSecurityDashboardProps> = ({
       {summary && (
         <Grid container spacing={3} sx={{ mb: 3 }}>
           <Grid item xs={12} md={3}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" component="div">
+            <Card sx={{
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              color: 'white',
+              boxShadow: '0 4px 20px rgba(102, 126, 234, 0.4)',
+              borderRadius: '8px'
+            }}>
+              <CardContent sx={{ textAlign: 'center', py: 2 }}>
+                <Typography variant="h4" component="div" fontWeight="700" sx={{ textShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>
                   {summary.total_findings}
                 </Typography>
-                <Typography color="text.secondary">
+                <Typography color="white" sx={{ opacity: 0.95, fontWeight: '500' }}>
                   Total Findings
                 </Typography>
               </CardContent>
@@ -286,9 +291,14 @@ const UnifiedSecurityDashboard: React.FC<UnifiedSecurityDashboardProps> = ({
           </Grid>
           
           <Grid item xs={12} md={9}>
-            <Card>
+            <Card sx={{
+              background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+              color: 'white',
+              boxShadow: '0 4px 20px rgba(79, 172, 254, 0.4)',
+              borderRadius: '8px'
+            }}>
               <CardContent>
-                <Typography variant="subtitle1" gutterBottom>
+                <Typography variant="subtitle1" gutterBottom fontWeight="600" sx={{ textShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>
                   Severity Breakdown
                 </Typography>
                 <Box display="flex" gap={1} flexWrap="wrap">
@@ -300,12 +310,16 @@ const UnifiedSecurityDashboard: React.FC<UnifiedSecurityDashboardProps> = ({
                         color={getSeverityColor(severity) as any}
                         size="small"
                         icon={getSeverityIcon(severity)}
+                        sx={{ fontWeight: '500' }}
                       />
                     )
                   ))}
                 </Box>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                <Typography variant="body2" color="white" sx={{ mt: 1, opacity: 0.95, fontWeight: '500' }}>
                   Average Confidence: {summary.average_confidence}%
+                  <span style={{ display: 'block', fontSize: '0.8em', marginTop: '4px', opacity: 0.9 }}>
+                    Based on AI analysis and pattern detection correlation
+                  </span>
                 </Typography>
               </CardContent>
             </Card>
