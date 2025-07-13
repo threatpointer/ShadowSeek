@@ -56,6 +56,9 @@ import {
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { toast } from 'react-toastify';
 import { apiClient } from '../utils/api';
+// @ts-ignore - Type definitions missing for style imports
+import atomOneDark from 'react-syntax-highlighter/dist/styles/atom-one-dark';
+import SyntaxHighlighter from 'react-syntax-highlighter';
 
 // Types for fuzzing system
 interface Binary {
@@ -1174,27 +1177,19 @@ const FuzzingDashboard: React.FC<FuzzingDashboardProps> = ({ binaryId }) => {
               <CircularProgress />
             </Box>
           ) : (
-            <Box
-              component="pre"
-              sx={{
-                backgroundColor: '#1e1e1e',
-                color: '#d4d4d4',
-                p: 2,
-                m: 0,
-                overflow: 'auto',
-                maxHeight: '70vh',
-                fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
-                fontSize: '0.875rem',
-                lineHeight: 1.5,
-                '& .keyword': { color: '#569cd6' },
-                '& .string': { color: '#ce9178' },
-                '& .comment': { color: '#6a9955' },
-                '& .function': { color: '#dcdcaa' },
-                '& .number': { color: '#b5cea8' }
+            <SyntaxHighlighter
+              language={viewingContent?.language || 'text'}
+              style={atomOneDark}
+              showLineNumbers
+              customStyle={{
+                margin: 0,
+                borderRadius: 0,
+                fontSize: '14px',
+                backgroundColor: '#181818'
               }}
             >
-              {viewingContent?.content}
-            </Box>
+              {viewingContent?.content || ''}
+            </SyntaxHighlighter>
           )}
         </DialogContent>
       </Dialog>

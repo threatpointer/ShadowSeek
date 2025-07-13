@@ -90,6 +90,8 @@ import { apiClient, formatFileSize, formatDate, getStatusColor, BinaryDetails as
 import SyntaxHighlighter from 'react-syntax-highlighter';
 // @ts-ignore - Type definitions missing for style imports
 import tomorrow from 'react-syntax-highlighter/dist/styles/tomorrow';
+// @ts-ignore - Type definitions missing for style imports
+import atomOneDark from 'react-syntax-highlighter/dist/styles/atom-one-dark';
 import TaskProgress from './TaskProgress';
 import UnifiedSecurityDashboard from './UnifiedSecurityDashboard';
 import FuzzingDashboard from './FuzzingDashboard';
@@ -1153,6 +1155,7 @@ const BinaryDetails: React.FC = () => {
   
   // Security analysis data
   const [securityFindings, setSecurityFindings] = useState<{ [key: string]: any[] }>({});
+  const [securitySummary, setSecuritySummary] = useState<any>(null);
   
 
 
@@ -1230,12 +1233,10 @@ const BinaryDetails: React.FC = () => {
 
   const fetchSecurityFindings = async () => {
     if (!binaryId) return;
-    
     try {
       const response = await fetch(`/api/binaries/${binaryId}/security-findings`);
       if (response.ok) {
         const data = await response.json();
-        
         // Group findings by function_id
         const findingsByFunction: { [key: string]: any[] } = {};
         data.findings?.forEach((finding: any) => {
@@ -1246,8 +1247,8 @@ const BinaryDetails: React.FC = () => {
             findingsByFunction[finding.function_id].push(finding);
           }
         });
-        
         setSecurityFindings(findingsByFunction);
+        setSecuritySummary(data.summary || null);
       }
     } catch (err) {
       console.error('Error fetching security findings:', err);
@@ -2104,6 +2105,12 @@ const BinaryDetails: React.FC = () => {
   // Use fresh functions data from binaryDetails to ensure real-time updates
   const functions = binaryDetails.functions || [];
 
+  // Vulnerabilities count: only CRITICAL, HIGH, MEDIUM, LOW from summary
+  const vulnerabilitySeverities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+  const vulnerabilitiesCount = securitySummary
+    ? vulnerabilitySeverities.reduce((sum, sev) => sum + (securitySummary.severity_counts?.[sev] || 0), 0)
+    : 0;
+
   return (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
@@ -2181,13 +2188,6 @@ const BinaryDetails: React.FC = () => {
             sx={{ mr: 1 }}
           >
             {fuzzingGenerating ? 'Generating...' : 'Fuzzing'}
-          </Button>
-          <Button
-            variant="outlined"
-            onClick={handleSearchPatterns}
-            sx={{ mr: 1 }}
-          >
-            Search Patterns
           </Button>
           <Button
             variant="outlined"
@@ -2348,7 +2348,7 @@ const BinaryDetails: React.FC = () => {
                 <Grid item xs={12} sm={6} md={2.4}>
                   <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
                     <Typography variant="h5" color="warning.main" fontWeight="bold">
-                      {Object.values(securityFindings).flat().length}
+                      {vulnerabilitiesCount}
                     </Typography>
                     <Typography variant="body2" color="textSecondary">
                       Vulnerabilities
@@ -2363,7 +2363,6 @@ const BinaryDetails: React.FC = () => {
           <Card sx={{ mt: 3 }}>
             <Tabs value={tabValue} onChange={(e, newValue) => setTabValue(newValue)}>
               <Tab label="Functions" />
-              <Tab label="Results" />
               <Tab 
                 label={
                   <Box display="flex" alignItems="center" gap={2}>
@@ -2380,7 +2379,6 @@ const BinaryDetails: React.FC = () => {
                   </Box>
                 } 
               />
-
             </Tabs>
 
             <TabPanel value={tabValue} index={0}>
@@ -2887,15 +2885,16 @@ const BinaryDetails: React.FC = () => {
                                                   <Chip label="Cached" size="small" color="info" />
                                                 )}
                                               </Box>
-                                              <Paper sx={{ p: 0, maxHeight: '400px', overflow: 'auto', bgcolor: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                              <Paper sx={{ p: 0, maxHeight: '400px', overflow: 'auto', bgcolor: '#181818', border: '1px solid rgba(255,255,255,0.1)' }}>
                                                 <SyntaxHighlighter
                                                   language="c"
-                                                  style={tomorrow}
+                                                  style={atomOneDark}
                                                   showLineNumbers
                                                   customStyle={{
                                                     margin: 0,
                                                     borderRadius: 0,
-                                                    fontSize: '12px'
+                                                    fontSize: '12px',
+                                                    backgroundColor: '#181818'
                                                   }}
                                                 >
                                                   {functionData[func.id]?.decompiled?.decompiled_code || '// No code available'}
@@ -2932,63 +2931,10 @@ const BinaryDetails: React.FC = () => {
             </TabPanel>
 
             <TabPanel value={tabValue} index={1}>
-              {results.length > 0 ? (
-                <List>
-                  {results.map((result, index) => (
-                    <React.Fragment key={result.id}>
-                      <ListItem>
-                        <ListItemText
-                          primary={
-                            <Box display="flex" alignItems="center" gap={1}>
-                              <Typography variant="subtitle1">
-                                {result.analysis_type}
-                              </Typography>
-                              {result.function_address && (
-                                <Chip 
-                                  label={result.function_address}
-                                  size="small"
-                                  sx={{ fontFamily: 'monospace' }}
-                                />
-                              )}
-                            </Box>
-                          }
-                          secondary={
-                            <Typography variant="body2" color="textSecondary">
-                              Created: {formatDate(result.created_at)}
-                            </Typography>
-                          }
-                        />
-                        <ListItemSecondaryAction>
-                          <IconButton
-                            size="small"
-                            onClick={() => navigate(`/analysis/${result.id}`)}
-                            title="View Results"
-                          >
-                            <Visibility />
-                          </IconButton>
-                        </ListItemSecondaryAction>
-                      </ListItem>
-                      {index < results.length - 1 && <Divider />}
-                    </React.Fragment>
-                  ))}
-                </List>
-              ) : (
-                <Box textAlign="center" py={4}>
-                  <Typography variant="h6" color="textSecondary">
-                    No Analysis Results
-                  </Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    Run analysis operations to see results here.
-                  </Typography>
-                </Box>
-              )}
-            </TabPanel>
-
-            <TabPanel value={tabValue} index={2}>
               <UnifiedSecurityDashboard
                 binary={binaryDetails?.binary}
                 functions={functions}
-                onRefresh={fetchBinaryDetails}
+                onRefresh={fetchSecurityFindings}
                 onNavigateToFunction={(functionId) => {
                   // Switch to Functions tab (index 0)
                   setTabValue(0);
@@ -3015,16 +2961,13 @@ const BinaryDetails: React.FC = () => {
               />
             </TabPanel>
 
-            <TabPanel value={tabValue} index={3}>
+            <TabPanel value={tabValue} index={2}>
               <SimpleFuzzingInterface 
                 binaryId={binaryId!} 
                 functions={functions} 
                 onRefresh={fetchBinaryDetails} 
               />
             </TabPanel>
-
-
-
           </Card>
         </Grid>
 
