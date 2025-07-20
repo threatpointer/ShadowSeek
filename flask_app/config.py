@@ -41,20 +41,10 @@ class Config:
     
     # If Ghidra path not set, try to find it
     if not GHIDRA_INSTALL_DIR:
-        # Common installation paths
-        common_paths = [
-            r'D:\1132-Ghidra\ghidra_11.3.2_PUBLIC',
-            r'C:\Program Files\Ghidra',
-            r'C:\ghidra',
-            r'/opt/ghidra',
-            r'/usr/local/ghidra',
-            os.path.expanduser('~/ghidra')
-        ]
-        
-        for path in common_paths:
-            if os.path.exists(path):
-                GHIDRA_INSTALL_DIR = path
-                break
+        # No hardcoded fallback paths - user must configure GHIDRA_INSTALL_DIR
+        # This ensures the application works across different systems
+        print("Warning: GHIDRA_INSTALL_DIR not set. Please configure it in environment variables or .env file")
+        print("The application may not function properly without a valid Ghidra installation path")
 
 class DevelopmentConfig(Config):
     """Development configuration"""

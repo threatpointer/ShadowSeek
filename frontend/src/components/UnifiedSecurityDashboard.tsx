@@ -115,23 +115,52 @@ const UnifiedSecurityDashboard: React.FC<UnifiedSecurityDashboardProps> = ({
       setIsAnalyzing(true);
       setError(null);
       setAnalysisProgress(0);
-      setAnalysisStatus('Starting unified security analysis...');
 
-      // Check if functions are decompiled
+      // Check if functions are decompiled for enhanced messaging
       const decompiledFunctions = functions.filter(f => f.is_decompiled);
-      if (decompiledFunctions.length === 0) {
-        setError('No decompiled functions found. Please decompile functions first.');
-        return;
+      const hasDecompiledFunctions = decompiledFunctions.length > 0;
+
+      if (hasDecompiledFunctions) {
+        setAnalysisStatus(`Starting traditional security analysis on ${decompiledFunctions.length} decompiled functions...`);
+      } else {
+        setAnalysisStatus('Starting enhanced analysis: extracting binary data, auto-decompiling exports, running AI analysis...');
       }
 
-      setAnalysisStatus(`Analyzing ${decompiledFunctions.length} decompiled functions...`);
-
-      // Start binary-level security analysis
+      // Start binary-level security analysis (automatically selects traditional vs enhanced)
       const response = await api.post(`/binaries/${binary.id}/security-analysis`);
       
       if (response.data.success) {
         setAnalysisProgress(100);
-        setAnalysisStatus(`Analysis complete: ${response.data.total_findings} security findings discovered`);
+        
+        // Display analysis type and results
+        const analysisType = response.data.analysis_type || 'security';
+        const totalFindings = response.data.total_findings || 0;
+        
+        if (analysisType === 'enhanced') {
+          const methods = response.data.analysis_methods || [];
+          const exportDecomp = response.data.export_decompilation || {};
+          const traditionalAnalysis = response.data.traditional_analysis || {};
+          const coverage = response.data.coverage_analysis || {};
+          
+          let statusParts = [`${totalFindings} findings using ${methods.length} methods`];
+          
+          if (coverage.comprehensive_analysis) {
+            const compData = coverage.comprehensive_analysis;
+            statusParts.push(`Extracted ${compData.exports_found || 0} exports, ${compData.strings_found || 0} strings`);
+          }
+          
+          if (exportDecomp.performed) {
+            statusParts.push(`Auto-decompiled ${exportDecomp.exports_decompiled} exports`);
+          }
+          
+          if (traditionalAnalysis.performed) {
+            statusParts.push(`Analyzed ${traditionalAnalysis.functions_analyzed} functions`);
+          }
+          
+          setAnalysisStatus(`Enhanced analysis pipeline complete: ${statusParts.join(' | ')}`);
+        } else {
+          setAnalysisStatus(`Traditional analysis complete: ${totalFindings} findings from ${decompiledFunctions.length} functions`);
+        }
         
         // Reload findings
         await loadSecurityFindings();
@@ -209,7 +238,7 @@ const UnifiedSecurityDashboard: React.FC<UnifiedSecurityDashboardProps> = ({
   };
 
   const decompiledCount = functions.filter(f => f.is_decompiled).length;
-  const canAnalyze = decompiledCount > 0 && !isAnalyzing;
+  const canAnalyze = !isAnalyzing; // Enhanced analysis works with or without decompiled functions
 
   return (
     <Box>
@@ -229,6 +258,10 @@ const UnifiedSecurityDashboard: React.FC<UnifiedSecurityDashboardProps> = ({
           disabled={!canAnalyze}
           startIcon={<BugReportIcon />}
           size="large"
+          title={decompiledCount > 0 
+            ? 'Run traditional security analysis on decompiled functions'
+            : 'Run enhanced security analysis using exports, strings, imports, and AI'
+          }
         >
           {isAnalyzing ? 'Analyzing...' : 'Security Analysis'}
         </Button>
@@ -262,10 +295,18 @@ const UnifiedSecurityDashboard: React.FC<UnifiedSecurityDashboardProps> = ({
         </Alert>
       )}
 
-      {/* Analysis Prerequisites */}
-      {decompiledCount === 0 && (
+      {/* Analysis Information */}
+      {decompiledCount === 0 ? (
         <Alert severity="info" sx={{ mb: 3 }}>
-          Security analysis requires decompiled functions. Please use "Decompile All" first.
+          <Typography variant="subtitle2">Enhanced Security Analysis Pipeline</Typography>
+          Will automatically: (1) Extract binary data (exports, imports, strings), (2) Auto-decompile exported functions, 
+          (3) Run traditional analysis on decompiled exports, (4) Perform AI-driven comprehensive analysis. 
+          Perfect for DLLs and binaries with limited existing analysis.
+        </Alert>
+      ) : (
+        <Alert severity="success" sx={{ mb: 3 }}>
+          <Typography variant="subtitle2">Traditional + Enhanced Analysis Available</Typography>
+          {decompiledCount} decompiled functions found - will use comprehensive function-based analysis.
         </Alert>
       )}
 
@@ -542,8 +583,8 @@ const UnifiedSecurityDashboard: React.FC<UnifiedSecurityDashboardProps> = ({
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 {decompiledCount > 0 
-                  ? 'Click "Security Analysis" to start analyzing for vulnerabilities'
-                  : 'Decompile functions first, then run security analysis'
+                  ? 'Click "Security Analysis" to start analyzing for vulnerabilities using traditional function analysis'
+                  : 'Click "Security Analysis" to run the full pipeline: extract data → decompile exports → comprehensive analysis'
                 }
               </Typography>
             </Box>

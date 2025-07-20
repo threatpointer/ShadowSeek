@@ -151,7 +151,7 @@ const Configuration: React.FC = () => {
     setConfig({
       // Ghidra Settings
       ghidra_install_dir: process.platform === 'win32' 
-        ? 'D:\\Ghidra\\ghidra_11.3_PUBLIC' 
+        ? 'C:\\Program Files\\Ghidra' 
         : '/opt/ghidra',
       ghidra_bridge_port: 4768,
       ghidra_max_processes: 4,

@@ -55,36 +55,25 @@ class GhidraBridgeManager:
                 logger.warning("Ghidra installation not found. Please configure GHIDRA_INSTALL_DIR.")
     
     def _find_ghidra_path(self):
-        """Find Ghidra installation path"""
+        """Find Ghidra installation path from environment variables only"""
         # Check environment variable
         ghidra_path = os.environ.get('GHIDRA_INSTALL_DIR')
         if ghidra_path and os.path.exists(ghidra_path):
             return ghidra_path
         
-        # Check .env file
+        # Check .env file if environment variable not set
         env_path = Path('.env')
         if env_path.exists():
             with open(env_path, 'r') as f:
                 for line in f:
                     if line.startswith('GHIDRA_INSTALL_DIR='):
                         path = line.split('=', 1)[1].strip().strip('"\'')
-                        if os.path.exists(path):
+                        if path and os.path.exists(path):
                             return path
         
-        # Check common installation paths
-        common_paths = [
-            r'D:\1132-Ghidra\ghidra_11.3.2_PUBLIC',
-            r'C:\Program Files\Ghidra',
-            r'C:\ghidra',
-            r'/opt/ghidra',
-            r'/usr/local/ghidra',
-            os.path.expanduser('~/ghidra')
-        ]
-        
-        for path in common_paths:
-            if os.path.exists(path):
-                return path
-        
+        # No hardcoded fallback paths - user must configure GHIDRA_INSTALL_DIR
+        logger.error("GHIDRA_INSTALL_DIR not found in environment variables or .env file")
+        logger.error("Please set GHIDRA_INSTALL_DIR environment variable or add it to .env file")
         return None
     
     def start_bridge(self):
@@ -400,8 +389,13 @@ class GhidraBridgeManager:
                 logger.error(f"Error running Ghidra headless analyzer: {stderr}")
                 return None
             
-            # Check if output file was created
-            output_file = os.path.join(os.path.expanduser("~"), "ghidra_temp", "ghidra_analysis.json")
+            # Check if output file was created - use configurable temp directory
+            temp_base_dir = os.environ.get('GHIDRA_TEMP_DIR') or os.path.join(os.getcwd(), "temp", "ghidra_temp")
+            
+            # Ensure temp directory exists
+            os.makedirs(temp_base_dir, exist_ok=True)
+            
+            output_file = os.path.join(temp_base_dir, "ghidra_analysis.json")
             if os.path.exists(output_file):
                 # Read output file
                 with open(output_file, 'r') as f:

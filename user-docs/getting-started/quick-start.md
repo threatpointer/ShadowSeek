@@ -2,289 +2,367 @@
 
 ## 🚀 Get Started with ShadowSeek in 5 Minutes
 
-Welcome to ShadowSeek! This guide will get you analyzing binaries and hunting vulnerabilities in just a few minutes.
+Welcome to ShadowSeek! This guide will get you from zero to analyzing binaries with AI-powered security insights in just a few minutes.
 
 ---
 
-## 📋 Prerequisites
+## ✅ **Prerequisites Check**
 
-Before you begin, ensure you have:
+Ensure you have ShadowSeek installed:
 
-- **Python 3.8+** with pip and virtual environment support
-- **Node.js 16+** with npm
-- **Ghidra 10.4+** installation
-- **8GB+ RAM** for binary analysis
-- **Modern web browser** (Chrome, Firefox, Safari, Edge)
+- ✅ **Installation Complete**: Follow the [Installation Guide](installation.md) if needed
+- ✅ **System Running**: All components started via `start_all.bat` or `setup_environment.py --auto`
+- ✅ **Web Access**: Can access http://localhost:3000
 
----
-
-## ⚡ Quick Installation
-
-### 1. Clone and Setup Backend
-
-```bash
-# Clone repository
-git clone https://github.com/shadowseek/shadowseek.git
-cd shadowseek
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Configure environment
-cp env_template.txt .env
-# Edit .env with your Ghidra path and API keys
-```
-
-### 2. Setup Frontend
-
-```bash
-# Install frontend dependencies
-cd frontend
-npm install
-```
-
-### 3. Initialize Database
-
-```bash
-# Return to root directory
-cd ..
-
-# Initialize database
-python -c "from flask_app import create_app, db; app = create_app(); app.app_context().push(); db.create_all()"
-```
+**Not installed yet?** Run: `python setup_environment.py --auto`
 
 ---
 
-## 🎯 First Binary Analysis
+## 🎯 **Your First Binary Analysis (5 Minutes)**
 
-### 1. Start ShadowSeek
+### **Step 1: Access ShadowSeek (30 seconds)**
 
-```bash
-# Terminal 1: Start backend
-python run.py
-
-# Terminal 2: Start frontend
-cd frontend
-npm start
+```mermaid
+graph LR
+    A[Open Browser] --> B[http://localhost:3000]
+    B --> C[ShadowSeek Dashboard]
+    C --> D[Ready for Analysis!]
+    
+    style A fill:#e3f2fd
+    style D fill:#e8f5e8
 ```
 
-**Access:** Open `http://localhost:3000` in your browser
+1. **Open your web browser**
+2. **Navigate to**: `http://localhost:3000`
+3. **Verify**: You see the ShadowSeek dashboard
 
-### 2. Upload Your First Binary
+### **Step 2: Upload Your First Binary (1 minute)**
 
 1. **Click "Upload"** in the navigation bar
-2. **Drag and drop** a binary file (`.exe`, `.dll`, `.so`, etc.)
-3. **Watch automatic analysis** begin immediately
-4. **Wait for completion** (typically 2-5 minutes)
+2. **Choose a test binary**:
+   - **Windows**: `calc.exe`, `notepad.exe`, or any `.exe` file
+   - **Linux**: `/bin/ls`, `/usr/bin/cat`, or any executable
+   - **macOS**: `/bin/ls`, `/usr/bin/grep`, or any binary
 
-### 3. Explore Analysis Results
+3. **Drag and drop** the file or click to browse
+4. **Watch automatic analysis begin** immediately
 
-1. **Navigate to Dashboard** - View your uploaded binary
-2. **Click binary name** - Open detailed analysis
-3. **Explore Functions tab** - See decompiled functions
-4. **Try Security Analysis** - One-click vulnerability detection
+**Expected Timeline:**
+- **Upload**: Instant
+- **Initial Analysis**: 30-60 seconds  
+- **Function Decompilation**: 2-3 minutes
+- **Full Analysis**: 3-5 minutes total
+
+### **Step 3: Monitor Analysis Progress (2 minutes)**
+
+1. **Dashboard View**: Watch real-time progress updates
+2. **Analysis Stages**:
+   - ✅ **Binary Upload** - File received and validated
+   - ✅ **Ghidra Analysis** - Function extraction and decompilation  
+   - ✅ **Data Extraction** - Strings, symbols, imports/exports
+   - ✅ **Analysis Complete** - Ready for AI enhancement
+
+**Progress Indicators:**
+```
+🔄 Analyzing binary...
+📊 Extracting functions (45/67 complete)
+🎯 Decompiling functions (23/45 complete)  
+✅ Analysis complete! 67 functions found
+```
+
+### **Step 4: Explore Your Results (1 minute)**
+
+1. **Click your binary name** in the dashboard
+2. **Navigate through tabs**:
+   - **Functions**: See all decompiled functions
+   - **Strings**: Discovered text strings
+   - **Symbols**: Function and variable names
+   - **Imports/Exports**: Library dependencies
+
+### **Step 5: Try AI Analysis (1 minute)**
+
+1. **Go to Functions tab**
+2. **Click "AI Explain All"** button  
+3. **Watch AI generate explanations** for each function
+4. **Review results**: Plain English explanations of what each function does
+
+**AI Analysis Example:**
+```
+Function: validateUserInput
+AI Explanation: This function validates user input for a login 
+form. It checks password length and complexity but contains 
+a buffer overflow vulnerability when processing usernames 
+longer than 64 characters. Risk Score: 85/100
+```
 
 ---
 
-## 🔍 Your First Security Analysis
+## 🛡️ **Your First Security Analysis (3 Minutes)**
 
-### 1. Perform Security Analysis
+### **Step 1: Access Security Features**
 
-1. **Open your binary** from the dashboard
-2. **Click "Security Analysis" tab**
+1. **Click "Security Hub"** in the navigation
+2. **Select your analyzed binary**
 3. **Click "Analyze Security"** button
-4. **Review findings** with confidence scores
 
-### 2. Navigate Security Findings
+### **Step 2: Review Security Findings**
 
-1. **Click function hyperlinks** in security findings
-2. **Auto-navigate** to Functions tab
-3. **View expanded function details** with AI analysis
-4. **Review decompiled code** and security implications
+```mermaid
+graph TD
+    A[Security Analysis] --> B[75+ Pattern Detection]
+    B --> C[AI Validation]
+    C --> D[Confidence Scoring]
+    D --> E[CWE/CVE Mapping]
+    
+    A --> F[String Analysis]
+    A --> G[Import Analysis] 
+    A --> H[Memory Analysis]
+    
+    B --> I[Buffer Overflows]
+    B --> J[Format String Bugs]
+    B --> K[Command Injection]
+    
+    style A fill:#e3f2fd
+    style E fill:#ffebee
+```
 
----
+**Typical Security Findings:**
+- **🔴 High Risk**: Buffer overflows, format string vulnerabilities
+- **🟡 Medium Risk**: Weak cryptography, information disclosure  
+- **🟢 Low Risk**: Minor security practices, hardening opportunities
 
-## 🎯 Your First Fuzzing Harness
+### **Step 3: Understand the Results**
 
-### 1. Generate Fuzzing Harness
-
-1. **Complete security analysis** (previous step)
-2. **Click "Fuzzing" tab** or fuzzing button
-3. **Review AI-selected targets** with rationales
-4. **Click "Generate Harness"** for AFL/AFL++
-
-### 2. View Generated Code
-
-1. **Click "View Code"** on generated harness
-2. **Explore syntax-highlighted code** (C, Makefile, README)
-3. **Copy code snippets** to clipboard
-4. **Download complete package** as ZIP
-
-### 3. Deploy Fuzzing Campaign
-
-```bash
-# Extract downloaded harness
-unzip fuzzing_harness.zip
-cd fuzzing_harness
-
-# Install AFL++ (if not already installed)
-# Ubuntu/Debian: sudo apt install afl++
-# macOS: brew install afl++
-
-# Build harness
-make
-
-# Setup inputs
-make setup
-
-# Start fuzzing
-make fuzz
+**Sample Security Report:**
+```json
+{
+  "vulnerability": "Buffer Overflow in processCommand()",
+  "risk_score": 92,
+  "confidence": 94.2,
+  "cwe": "CWE-120",
+  "evidence": "strcpy() used without bounds checking",
+  "ai_explanation": "Function copies user input to fixed buffer 
+                     without length validation, enabling stack 
+                     buffer overflow attacks."
+}
 ```
 
 ---
 
-## 📊 Understanding the Interface
+## 🎯 **Generate Your First Fuzzing Harness (2 Minutes)**
 
-### Navigation Overview
+### **Step 1: Access Fuzzing Dashboard**
 
-- **🏠 Dashboard** - View all uploaded binaries and their status
-- **📤 Upload** - Upload new binaries for analysis
-- **⚖️ Compare** - Compare multiple binaries side-by-side
-- **🛡️ Security Hub** - Advanced security analysis dashboard
-- **🎯 Fuzzing** - Fuzzing harness generation and management
-- **⚙️ Config** - Configure AI providers and system settings
-- **🔧 System** - System management and diagnostics
+1. **Click "Fuzzing"** in navigation
+2. **Select your binary**
+3. **Click "Generate Harness"**
 
-### Binary Analysis Tabs
+### **Step 2: Review Fuzzing Setup**
 
-- **📊 Overview** - Binary metadata and analysis status
-- **🔧 Functions** - Function listing with decompilation and AI analysis
-- **🔍 Results** - Comprehensive analysis data (imports, exports, strings)
-- **🛡️ Security Analysis** - Unified security findings with evidence
-- **🎯 Fuzzing** - AI-powered fuzzing harness generation
-
----
-
-## 🎛️ Essential Configuration
-
-### 1. Configure AI Provider
-
-1. **Navigate to Config**
-2. **Select AI Provider** (OpenAI, Anthropic, Google, Ollama)
-3. **Add API Key** for your chosen provider
-4. **Test Connection** to verify setup
-
-### 2. Adjust Analysis Settings
-
-```bash
-# Edit .env file
-GHIDRA_PATH=/path/to/ghidra
-OPENAI_API_KEY=your_key_here
-ANALYSIS_TIMEOUT=300
-MAX_FUNCTIONS_PER_BINARY=1000
+**AI Target Selection Process:**
+```mermaid
+graph LR
+    A[Security Findings] --> B[AI Analysis]
+    B --> C[High-Risk Functions]
+    C --> D[Fuzzing Targets]
+    D --> E[Harness Generation]
+    E --> F[Multi-Fuzzer Support]
+    
+    F --> G[AFL++]
+    F --> H[LibFuzzer]
+    F --> I[Honggfuzz]
+    
+    style A fill:#ffebee
+    style C fill:#fff3e0
+    style F fill:#e8f5e8
 ```
 
-### 3. Verify Ghidra Bridge
+**Generated Harness Example:**
+```c
+// Auto-generated fuzzing harness for processCommand()
+#include "target_binary.h"
 
-1. **Check System tab** for bridge status
-2. **Ensure "Connected"** status
-3. **Test bridge connection** if needed
+int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    if (size < 4 || size > 1024) return 0;
+    
+    // Target the vulnerable processCommand function
+    char buffer[1024];
+    memcpy(buffer, data, size);
+    buffer[size] = '\0';
+    
+    processCommand(buffer);
+    return 0;
+}
+```
 
----
+### **Step 3: Export and Use**
 
-## 🏆 Best Practices
-
-### Analysis Workflow
-
-1. **Upload binaries** during low-activity periods (analysis is CPU-intensive)
-2. **Start with smaller binaries** to familiarize yourself with the interface
-3. **Use AI analysis selectively** to conserve API credits
-4. **Review security findings** before generating fuzzing harnesses
-
-### Security Analysis
-
-1. **Trust high-confidence findings** (>90%) for immediate investigation
-2. **Review medium-confidence findings** (70-90%) manually
-3. **Use evidence trails** to understand detection rationale
-4. **Mark false positives** to improve future analysis
-
-### Fuzzing Best Practices
-
-1. **Review AI target selection** rationale before proceeding
-2. **Test harnesses locally** before large-scale campaigns
-3. **Monitor resource usage** during fuzzing campaigns
-4. **Document vulnerability discoveries** systematically
+1. **Download harness** files (C code + Makefile)
+2. **Copy to your fuzzing environment**
+3. **Compile and run** with your preferred fuzzer
 
 ---
 
-## 🚨 Common Issues & Solutions
+## 📊 **Understanding Your Dashboard**
 
-### Binary Upload Issues
+### **Main Dashboard Overview**
 
-**Problem:** File type not supported
-**Solution:** Ensure file has supported extension (`.exe`, `.dll`, `.so`, `.bin`, etc.)
+```mermaid
+graph TD
+    A[ShadowSeek Dashboard] --> B[Binary Management]
+    A --> C[Security Hub]
+    A --> D[Fuzzing Dashboard]
+    A --> E[Configuration]
+    
+    B --> F[Upload Binaries]
+    B --> G[Analysis Status] 
+    B --> H[Binary Details]
+    
+    C --> I[Vulnerability Detection]
+    C --> J[Security Reports]
+    C --> K[Risk Assessment]
+    
+    D --> L[Harness Generation]
+    D --> M[Fuzzing Campaigns]
+    D --> N[Performance Metrics]
+    
+    style A fill:#e3f2fd
+    style C fill:#ffebee
+    style D fill:#e8f5e8
+```
 
-**Problem:** Analysis stuck in "analyzing" status
-**Solution:** Click "Restart Analysis" button or reset analysis status
+### **Key Interface Elements**
 
-### Ghidra Bridge Issues
-
-**Problem:** Bridge shows "disconnected"
-**Solution:** Restart ShadowSeek backend and check Ghidra installation path
-
-**Problem:** Analysis fails with bridge error
-**Solution:** Verify Ghidra Bridge dependencies and Python path
-
-### Performance Issues
-
-**Problem:** Analysis takes too long
-**Solution:** Reduce analysis scope or increase timeout in configuration
-
-**Problem:** UI becomes unresponsive
-**Solution:** Close other browser tabs and refresh the application
-
----
-
-## 🎯 Next Steps
-
-### Explore Advanced Features
-
-1. **[Security Hub](../user-guide/security-hub.md)** - Advanced vulnerability detection
-2. **[Fuzzing Dashboard](../user-guide/fuzzing-dashboard.md)** - Comprehensive fuzzing management
-3. **[API Integration](../api-reference/rest-api.md)** - Automate workflows with REST API
-4. **[System Administration](../administration/system-management.md)** - Advanced configuration
-
-### Learning Resources
-
-1. **[Complete Workflow Examples](../examples/complete-workflow.md)** - Detailed analysis scenarios
-2. **[Architecture Overview](../architecture/system-architecture.md)** - Technical deep dive
-3. **[Troubleshooting Guide](../administration/troubleshooting.md)** - Common issues and solutions
+| Section | Purpose | Key Features |
+|---------|---------|--------------|
+| **📊 Dashboard** | Binary management and overview | Upload, status, analysis progress |
+| **🛡️ Security Hub** | Vulnerability detection and analysis | 75+ patterns, AI validation, CWE mapping |
+| **🎯 Fuzzing** | Harness generation and campaigns | Multi-fuzzer support, AI targeting |
+| **⚙️ Configuration** | System settings and AI providers | API keys, Ghidra paths, preferences |
 
 ---
 
-## 📞 Getting Help
+## 🔧 **Configure AI Services (Optional)**
 
-If you encounter issues:
+### **Step 1: Get OpenAI API Key**
 
-1. **Check [Troubleshooting Guide](../administration/troubleshooting.md)**
-2. **Review [FAQ](../administration/troubleshooting.md#faq)**
-3. **Contact support:** dev@shadowseek.security
+1. **Visit**: https://platform.openai.com/api-keys
+2. **Create account** and billing setup
+3. **Generate API key** (starts with `sk-...`)
+
+### **Step 2: Configure in ShadowSeek**
+
+1. **Click "Configuration"** in navigation
+2. **Enter API key** in OpenAI section
+3. **Select model**: `gpt-4o-mini` (recommended for cost/performance)
+4. **Save configuration**
+
+### **Step 3: Test AI Connection**
+
+1. **Click "Test Connection"** button
+2. **Verify**: ✅ "Connection successful!"
+3. **Return to analysis** - AI features now available
 
 ---
 
-## 🎉 Congratulations!
+## 🎯 **Complete Analysis Workflow**
 
-You've successfully:
-- ✅ Set up ShadowSeek
-- ✅ Analyzed your first binary
-- ✅ Performed security analysis
-- ✅ Generated a fuzzing harness
-- ✅ Explored the interface
+### **Professional Binary Analysis Process**
 
-You're now ready to leverage ShadowSeek's enterprise-grade security analysis capabilities for your vulnerability research and security assessment needs.
+```mermaid
+graph TD
+    A[Upload Binary] --> B[Automatic Analysis]
+    B --> C[Function Decompilation]
+    C --> D[AI Enhancement]
+    D --> E[Security Detection]  
+    E --> F[Fuzzing Harness]
+    F --> G[Export Results]
+    
+    C --> H[Review Functions]
+    D --> I[Understand Code]
+    E --> J[Prioritize Risks]
+    F --> K[Test Vulnerabilities]
+    G --> L[Professional Report]
+    
+    style A fill:#e1f5fe
+    style D fill:#f3e5f5
+    style E fill:#ffebee
+    style F fill:#e8f5e8
+    style G fill:#fff3e0
+```
 
-**Next:** Explore the [User Guide](../user-guide/README.md) for detailed feature documentation. 
+**Typical Timeline for Complete Analysis:**
+- **Small Binary** (100 functions): 5-10 minutes
+- **Medium Binary** (500 functions): 15-30 minutes  
+- **Large Binary** (1000+ functions): 30-60 minutes
+
+---
+
+## 💡 **Pro Tips for New Users**
+
+### **🚀 Maximize Analysis Speed**
+- **Start with smaller binaries** (< 50MB) for faster results
+- **Use AI selectively** - run "AI Explain All" on high-risk functions first
+- **Batch upload** multiple binaries for parallel analysis
+
+### **🎯 Focus on High-Value Targets**
+- **Prioritize network-facing binaries** for security analysis
+- **Target user input functions** for vulnerability hunting
+- **Focus on authentication/authorization functions** for critical analysis
+
+### **🛡️ Security Analysis Best Practices**
+- **Review high-confidence findings first** (90%+ confidence)
+- **Validate AI explanations** with manual code review  
+- **Use fuzzing harnesses** to confirm exploitability
+- **Export professional reports** for stakeholder communication
+
+---
+
+## 🔍 **What's Next?**
+
+### **📚 Explore Advanced Features**
+1. **[Dashboard Guide](../user-guide/dashboard.md)** - Complete interface overview
+2. **[Security Analysis Deep Dive](../security-features/vulnerability-detection.md)** - Advanced vulnerability hunting
+3. **[Fuzzing Campaigns](../security-features/fuzzing.md)** - Comprehensive fuzzing guide
+4. **[API Integration](../api-reference/rest-api.md)** - Automate your workflow
+
+### **🎯 Real-World Applications**
+- **Malware Analysis**: Understand suspicious binaries quickly
+- **Penetration Testing**: Find vulnerabilities in target applications
+- **Code Review**: AI-assisted security analysis of compiled code
+- **Vulnerability Research**: Discover new security issues
+
+### **🏢 Enterprise Integration**
+- **CI/CD Pipeline**: Integrate security analysis into build processes
+- **Security Operations**: Automate threat analysis workflows
+- **Compliance**: Generate security reports for auditing
+- **Team Training**: Use AI explanations to educate junior analysts
+
+---
+
+## 🎉 **Congratulations!**
+
+You've successfully completed your first ShadowSeek analysis! You now have:
+
+✅ **Uploaded and analyzed** a binary file  
+✅ **Generated AI explanations** for code functionality  
+✅ **Detected security vulnerabilities** with confidence scoring  
+✅ **Created fuzzing harnesses** for vulnerability testing  
+✅ **Explored the professional interface** and key features
+
+**🚀 Ready to analyze more complex binaries?** Try uploading larger executables, DLLs, or suspicious files to see ShadowSeek's full power in action.
+
+---
+
+## 🆘 **Need Help?**
+
+- **📧 Quick Issues**: Check [troubleshooting guide](../administration/troubleshooting.md)
+- **📖 Detailed Guides**: Browse [complete documentation](../README.md)
+- **🔧 System Issues**: Run `python quick_test.py` for diagnostics
+- **🤖 AI Problems**: Verify API key in Configuration page
+
+**Happy hunting! 🕵️‍♀️🔍**
+
+---
+
+*ShadowSeek Quick Start Guide - Get from zero to expert in minutes, not hours.* 

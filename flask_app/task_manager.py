@@ -15,6 +15,7 @@ from pathlib import Path
 from flask import current_app
 from flask_app.models import db, Binary, AnalysisTask, AnalysisResult, Function
 from flask_app.ghidra_bridge_manager import GhidraBridgeManager
+from ghidra_bridge import GhidraBridge
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -527,11 +528,11 @@ class TaskManager:
                 db.session.add(comp_analysis)
             
             # Set initial progress metadata
-            comp_analysis.program_metadata = {
+            comp_analysis.program_metadata = json.dumps({
                 "status": "initializing",
                 "progress": 0.1,
                 "current_step": "Starting analysis"
-            }
+            })
             db.session.commit()
             logger.info("Created comprehensive analysis progress tracking record")
             
@@ -544,37 +545,49 @@ class TaskManager:
                 f"skip_functions={existing_functions_count}"
             ]
             
+            # Set up environment variables for the script
+            env = os.environ.copy()
+            env['GHIDRA_BINARY_ID'] = binary_id
+            env['GHIDRA_SKIP_FUNCTIONS'] = str(existing_functions_count)
+            if not env.get('GHIDRA_TEMP_DIR'):
+                env['GHIDRA_TEMP_DIR'] = os.path.join(os.getcwd(), "temp", "ghidra_temp")
+            
+            # Construct the full command
             cmd = [
                 headless_path,
                 projects_dir,
                 project_name,
                 "-import", binary_path,
-                "-scriptPath", os.path.dirname(script_path),
-                "-postScript", os.path.basename(script_path)
-            ] + script_args
+                "-scriptPath", current_app.config['ANALYSIS_SCRIPTS_DIR'],
+                "-postScript", "comprehensive_analysis_direct.py"
+            ]
             
-            logger.info(f"Running comprehensive analysis command:")
+            # Add script arguments
+            cmd.extend(script_args)
+            
+            logger.info("Running comprehensive analysis command:")
             logger.info(f"  Command: {' '.join(cmd)}")
             logger.info(f"  Script path: {script_path}")
             logger.info(f"  Binary path: {binary_path}")
             logger.info(f"  Existing functions: {existing_functions_count}")
+            logger.info(f"  Environment: GHIDRA_BINARY_ID={env.get('GHIDRA_BINARY_ID')}, GHIDRA_TEMP_DIR={env.get('GHIDRA_TEMP_DIR')}")
             
-            # Start progress monitoring thread
-            progress_thread = None
+            # Monitor analysis progress with fake progress updates
             stop_progress = threading.Event()
             
             def monitor_progress():
-                """Monitor progress and update database every 30 seconds"""
                 progress_steps = [
-                    ("Extracting metadata", 0.2),
-                    ("Analyzing memory layout", 0.3),
-                    ("Processing functions", 0.5),
-                    ("Extracting strings", 0.7),
-                    ("Analyzing symbols", 0.8),
-                    ("Finalizing analysis", 0.9)
+                    ("Initializing analysis", 0.1),
+                    ("Analyzing functions", 0.2),
+                    ("Decompiling functions", 0.4),
+                    ("Extracting strings", 0.6),
+                    ("Analyzing memory", 0.7),
+                    ("Processing symbols", 0.8),
+                    ("Generating results", 0.9),
+                    ("Finalizing analysis", 1.0)
                 ]
                 
-                step_duration = 30  # 30 seconds per step
+                step_duration = 8  # seconds per step
                 start_time = time.time()
                 
                 for step_name, progress in progress_steps:
@@ -590,11 +603,11 @@ class TaskManager:
                         logger.info(f"Progress update: {step_name} ({int(progress*100)}%)")
                         comp_analysis = ComprehensiveAnalysis.query.filter_by(binary_id=binary_id).first()
                         if comp_analysis and not comp_analysis.is_complete:
-                            comp_analysis.program_metadata = {
+                            comp_analysis.program_metadata = json.dumps({
                                 "status": step_name.lower().replace(" ", "_"),
                                 "progress": progress,
                                 "current_step": step_name
-                            }
+                            })
                             db.session.commit()
                     except Exception as e:
                         logger.error(f"Error updating progress: {e}")
@@ -610,7 +623,8 @@ class TaskManager:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                cwd=os.getcwd()
+                cwd=os.getcwd(),
+                env=env  # Pass the environment variables
             )
             
             # Wait for completion with timeout (30 minutes)
@@ -649,17 +663,70 @@ class TaskManager:
             # Check if analysis completed successfully by verifying database records
             logger.info("Comprehensive analysis completed, verifying database results...")
             
+            # Always log the process output for debugging
+            logger.info(f"Ghidra process completed with return code: {process.returncode}")
+            if stdout.strip():
+                logger.info(f"Ghidra STDOUT: {stdout}")
+            if stderr.strip():
+                logger.info(f"Ghidra STDERR: {stderr}")
+            
             # Wait a moment for database writes to complete
             time.sleep(2)
             
-            # Check comprehensive analysis record
+            # First, check if the script wrote results to the temp JSON file
+            # (since the script runs in Ghidra's environment and can't access Flask's database directly)
+            temp_base_dir = os.environ.get('GHIDRA_TEMP_DIR') or os.path.join(os.getcwd(), "temp", "ghidra_temp")
+            temp_file = os.path.join(temp_base_dir, f"comprehensive_analysis_{binary_id}.json")
+            
+            if os.path.exists(temp_file):
+                logger.info(f"Found comprehensive analysis results in temp file: {temp_file}")
+                try:
+                    # Read the JSON results from the temp file
+                    with open(temp_file, 'r') as f:
+                        temp_results = json.load(f)
+                    
+                    if temp_results.get("success"):
+                        logger.info("Processing comprehensive analysis results from temp file...")
+                        
+                        # Store the results in database using the existing storage method
+                        # Create a task ID for this storage operation
+                        storage_task_id = str(uuid.uuid4())
+                        
+                        # Use existing storage method to save to database
+                        self._store_comprehensive_analysis(storage_task_id, binary_id, temp_results)
+                        
+                        # Clean up temp file after successful storage
+                        os.remove(temp_file)
+                        logger.info("Successfully processed temp file results and stored in database")
+                        
+                    else:
+                        logger.error(f"Temp file indicates analysis failed: {temp_results.get('error')}")
+                        return {
+                            "success": False,
+                            "error": f"Analysis script failed: {temp_results.get('error')}",
+                            "debug_output": temp_results
+                        }
+                        
+                except Exception as e:
+                    logger.error(f"Error processing temp file results: {e}")
+                    return {
+                        "success": False,
+                        "error": f"Failed to process analysis results from temp file: {e}",
+                        "temp_file": temp_file
+                    }
+            else:
+                logger.warning(f"No temp file found at: {temp_file}")
+            
+            # Now check comprehensive analysis record in database
             comp_analysis = ComprehensiveAnalysis.query.filter_by(binary_id=binary_id).first()
             if not comp_analysis or not comp_analysis.is_complete:
                 logger.error("Comprehensive analysis did not complete successfully - no database record found")
                 return {
                     "success": False,
                     "error": "Analysis script completed but no results found in database",
-                    "debug_output": stdout[:500]
+                    "debug_output": stdout[:500],
+                    "temp_file_checked": temp_file,
+                    "temp_file_exists": os.path.exists(temp_file)
                 }
             
             # Verify we have data in the database
@@ -751,11 +818,11 @@ class TaskManager:
                 db.session.add(comp_analysis)
             
             # Set progress metadata
-            comp_analysis.program_metadata = {
+            comp_analysis.program_metadata = json.dumps({
                 "status": "fallback_analysis",
                 "progress": 0.3,
                 "current_step": "Using fallback analysis method"
-            }
+            })
             db.session.commit()
             
             # Run basic function analysis
@@ -769,12 +836,12 @@ class TaskManager:
                 # Update comprehensive analysis as complete
                 comp_analysis.functions_extracted = True
                 comp_analysis.is_complete = True
-                comp_analysis.program_metadata = {
+                comp_analysis.program_metadata = json.dumps({
                     "status": "completed",
                     "progress": 1.0,
                     "current_step": "Fallback analysis completed",
                     "method": "basic_function_analysis"
-                }
+                })
                 comp_analysis.statistics = json.dumps({
                     "totalFunctions": len(result.get("functions", [])),
                     "analysis_method": "fallback",
@@ -1401,7 +1468,12 @@ class TaskManager:
                         else:
                             logger.warning(f"[STORAGE DEBUG] Function {function_id} not found in database")
                     else:
-                        logger.warning(f"[STORAGE DEBUG] AI analysis failed for function {function_id}: {func_result.get('error')}")
+                        error_msg = func_result.get('error', 'Unknown error')
+                        logger.warning(f"[STORAGE DEBUG] AI analysis failed for function {function_id}: {error_msg}")
+                        
+                        # If it's a client initialization error, suggest checking configuration
+                        if 'client not initialized' in error_msg.lower():
+                            logger.info("💡 Hint: Update OpenAI API key in configuration at http://localhost:3000/config")
                 
                 # Commit individual function updates
                 db.session.commit()
@@ -1586,9 +1658,10 @@ class TaskManager:
                 )
                 db.session.add(comp_analysis)
             
-            # Store metadata and statistics
-            comp_analysis.program_metadata = data.get('metadata', {})
-            comp_analysis.statistics = data.get('statistics', {})
+            # Store metadata and statistics as JSON strings (not dicts)
+            import json
+            comp_analysis.program_metadata = json.dumps(data.get('metadata', {}))
+            comp_analysis.statistics = json.dumps(data.get('statistics', {}))
             
             logger.info(f"Storing comprehensive analysis data for binary {binary_id}")
             
@@ -1897,6 +1970,26 @@ class TaskManager:
             self._ai_service = AIService()
         
         return self._ai_service
+    
+    def reload_ai_service(self):
+        """Reload AI service with updated configuration"""
+        from .ai_service import AIService
+        logger.info("Reloading AI service with updated configuration")
+        
+        # Clear cached AI service
+        if hasattr(self, '_ai_service'):
+            delattr(self, '_ai_service')
+        
+        # Create new AI service instance
+        self._ai_service = AIService()
+        
+        # Log the status
+        if self._ai_service.client:
+            logger.info("AI service successfully reinitialized with API key")
+        else:
+            logger.warning("AI service reinitialized but no valid API key found")
+        
+        return self._ai_service.client is not None
     
     def _store_decompilation(self, task_id, binary_id, function_id, result):
         """

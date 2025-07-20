@@ -38,7 +38,7 @@ black==23.11.0
 flake8==6.1.0
 
 # Additional
-ghidra-bridge==1.1.0
+ghidra-bridge==1.0.0
 requests==2.31.0
 jsonschema==4.20.0
 pathlib==1.0.1

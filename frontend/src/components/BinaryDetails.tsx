@@ -54,7 +54,6 @@ import {
   PlayArrow,
   Visibility,
   Download,
-
   Code,
   BugReport,
   Refresh,
@@ -82,7 +81,12 @@ import {
   Description,
   Delete,
   ContentCopy,
-  Close
+  Close,
+  Storage,        // For Strings tab
+  AccountTree,    // For Symbols tab  
+  Memory,         // For Memory Blocks tab
+  ImportExport,   // For Imports/Exports tab
+  DataObject      // For data display
 } from '@mui/icons-material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -1157,6 +1161,18 @@ const BinaryDetails: React.FC = () => {
   const [securityFindings, setSecurityFindings] = useState<{ [key: string]: any[] }>({});
   const [securitySummary, setSecuritySummary] = useState<any>(null);
   
+  // Comprehensive analysis data for new tabs
+  const [stringsData, setStringsData] = useState<any[]>([]);
+  const [symbolsData, setSymbolsData] = useState<any[]>([]);
+  const [memoryBlocksData, setMemoryBlocksData] = useState<any[]>([]);
+  const [importsData, setImportsData] = useState<any[]>([]);
+  const [exportsData, setExportsData] = useState<any[]>([]);
+  const [dataLoading, setDataLoading] = useState<Record<string, boolean>>({
+    strings: false,
+    symbols: false,
+    memory: false,
+    imports: false
+  });
 
 
   useEffect(() => {
@@ -1431,7 +1447,7 @@ const BinaryDetails: React.FC = () => {
       toast.success('Fuzzing harness generated successfully!');
       
       // Switch to Fuzzing tab and scroll to it
-      setTabValue(3);
+              setTabValue(3); // Symbols tab updated index
       setTimeout(() => {
         const fuzzingTab = document.querySelector('[role="tabpanel"][hidden="false"]');
         if (fuzzingTab) {
@@ -2111,6 +2127,40 @@ const BinaryDetails: React.FC = () => {
     ? vulnerabilitySeverities.reduce((sum, sev) => sum + (securitySummary.severity_counts?.[sev] || 0), 0)
     : 0;
 
+  // Load comprehensive analysis data for different tabs
+  const fetchComprehensiveData = async (dataType: string) => {
+    if (!binaryId) return;
+    
+    setDataLoading(prev => ({ ...prev, [dataType]: true }));
+    
+    try {
+      const response = await apiClient.getComprehensiveData(binaryId, dataType, 1, 100);
+      
+      switch (dataType) {
+        case 'strings':
+          setStringsData(response.data || []);
+          break;
+        case 'symbols':
+          setSymbolsData(response.data || []);
+          break;
+        case 'memory_blocks':
+          setMemoryBlocksData(response.data || []);
+          break;
+        case 'imports':
+          setImportsData(response.data || []);
+          break;
+        case 'exports':
+          setExportsData(response.data || []);
+          break;
+      }
+    } catch (error) {
+      console.error(`Error fetching ${dataType}:`, error);
+      toast.error(`Failed to load ${dataType}`);
+    } finally {
+      setDataLoading(prev => ({ ...prev, [dataType]: false }));
+    }
+  };
+
   return (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
@@ -2165,7 +2215,7 @@ const BinaryDetails: React.FC = () => {
             color="primary"
             onClick={() => {
               // Switch to Security Analysis tab and scroll to it
-              setTabValue(2);
+              setTabValue(2); // Strings tab updated index
               setTimeout(() => {
                 const securityTab = document.querySelector('[role="tabpanel"][hidden="false"]');
                 if (securityTab) {
@@ -2174,7 +2224,7 @@ const BinaryDetails: React.FC = () => {
               }, 100);
             }}
             startIcon={<BugReport />}
-            disabled={functions.filter(f => f.is_decompiled).length === 0}
+            disabled={false} // Enhanced security analysis works with or without decompiled functions
             sx={{ mr: 1 }}
           >
             Security Analysis
@@ -2259,13 +2309,56 @@ const BinaryDetails: React.FC = () => {
                       </Grid>
                     )}
                     {binary.mime_type && (
-                      <Grid item xs={12}>
+                      <Grid item xs={12} sm={6}>
                         <Box>
                           <Typography variant="body2" color="textSecondary">MIME Type</Typography>
                           <Typography variant="body1" fontWeight="medium">{binary.mime_type}</Typography>
                         </Box>
                       </Grid>
                     )}
+                    
+                    {/* DLL Type Detection */}
+                    {binary.original_filename?.toLowerCase().endsWith('.dll') && (
+                      <Grid item xs={12} sm={6}>
+                        <Box>
+                          <Typography variant="body2" color="textSecondary">DLL Type</Typography>
+                          {(() => {
+                            const forwarderData = securitySummary?.forwarder_analysis;
+                            const isForwarderDLL = forwarderData?.is_forwarder;
+                            
+                            if (isForwarderDLL) {
+                              return (
+                                <Chip
+                                  label="🔄 API Forwarder DLL"
+                                  color="warning"
+                                  size="small"
+                                  variant="outlined"
+                                />
+                              );
+                            } else if (forwarderData) {
+                              return (
+                                <Chip
+                                  label="⚙️ Implementation DLL"
+                                  color="success"
+                                  size="small"
+                                  variant="outlined"
+                                />
+                              );
+                            } else {
+                              return (
+                                <Chip
+                                  label="🔍 Analysis Pending"
+                                  color="info"
+                                  size="small"
+                                  variant="outlined"
+                                />
+                              );
+                            }
+                          })()}
+                        </Box>
+                      </Grid>
+                    )}
+                    
                     {binary.file_hash && (
                       <Grid item xs={12}>
                         <Box>
@@ -2366,6 +2459,50 @@ const BinaryDetails: React.FC = () => {
               <Tab 
                 label={
                   <Box display="flex" alignItems="center" gap={2}>
+                    DLL Analysis
+                    <Code />
+                  </Box>
+                } 
+              />
+              <Tab 
+                label={
+                  <Box display="flex" alignItems="center" gap={2}>
+                    Strings
+                    <Storage />
+                  </Box>
+                } 
+                onClick={() => stringsData.length === 0 && fetchComprehensiveData('strings')}
+              />
+              <Tab 
+                label={
+                  <Box display="flex" alignItems="center" gap={2}>
+                    Symbols
+                    <AccountTree />
+                  </Box>
+                } 
+                onClick={() => symbolsData.length === 0 && fetchComprehensiveData('symbols')}
+              />
+              <Tab 
+                label={
+                  <Box display="flex" alignItems="center" gap={2}>
+                    Memory
+                    <Memory />
+                  </Box>
+                } 
+                onClick={() => memoryBlocksData.length === 0 && fetchComprehensiveData('memory_blocks')}
+              />
+              <Tab 
+                label={
+                  <Box display="flex" alignItems="center" gap={2}>
+                    Imports/Exports
+                    <ImportExport />
+                  </Box>
+                } 
+                onClick={() => (importsData.length === 0 || exportsData.length === 0) && Promise.all([fetchComprehensiveData('imports'), fetchComprehensiveData('exports')])}
+              />
+              <Tab 
+                label={
+                  <Box display="flex" alignItems="center" gap={2}>
                     Security Analysis
                     <Security />
                   </Box>
@@ -2444,7 +2581,7 @@ const BinaryDetails: React.FC = () => {
                           variant="contained"
                           color="secondary"
                           onClick={handleBulkAIExplain}
-                          disabled={bulkAIExplaining || functions.filter(f => f.is_decompiled).length === 0}
+                          disabled={bulkAIExplaining || functions.filter(f => f.is_decompiled).length === 0} // AI analysis requires decompiled functions
                           startIcon={bulkAIExplaining ? <CircularProgress size={16} /> : <Psychology />}
                           size="small"
                         >
@@ -2866,7 +3003,16 @@ const BinaryDetails: React.FC = () => {
                                                 
                                                 {/* AI Summary */}
                                                 <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontSize: '0.85rem', lineHeight: 1.4 }}>
-                                                  {functionData[func.id]?.aiExplanation?.ai_summary}
+                                                  {(() => {
+                                                    const aiData = functionData[func.id]?.aiExplanation;
+                                                    if (typeof aiData?.ai_summary === 'string') {
+                                                      return aiData.ai_summary;
+                                                    } else if (typeof aiData === 'string') {
+                                                      return aiData;
+                                                    } else {
+                                                      return 'No AI analysis available';
+                                                    }
+                                                  })()}
                                                 </Typography>
                                               </CardContent>
                                             </Card>
@@ -2897,7 +3043,17 @@ const BinaryDetails: React.FC = () => {
                                                     backgroundColor: '#181818'
                                                   }}
                                                 >
-                                                  {functionData[func.id]?.decompiled?.decompiled_code || '// No code available'}
+                                                  {(() => {
+                                                    // Safely extract decompiled code string
+                                                    const decompiledData = functionData[func.id]?.decompiled;
+                                                    if (decompiledData?.decompiled_code && typeof decompiledData.decompiled_code === 'string') {
+                                                      return decompiledData.decompiled_code;
+                                                    } else if (typeof decompiledData === 'string') {
+                                                      return decompiledData;
+                                                    } else {
+                                                      return '// No code available';
+                                                    }
+                                                  })()}
                                                 </SyntaxHighlighter>
                                               </Paper>
                                             </CardContent>
@@ -2930,7 +3086,747 @@ const BinaryDetails: React.FC = () => {
               )}
             </TabPanel>
 
+            {/* Combined DLL Analysis Tab */}
             <TabPanel value={tabValue} index={1}>
+              <Box>
+                <Typography variant="h6" mb={2}>
+                  DLL Analysis & Export Information
+                </Typography>
+
+                {(() => {
+                  // Check if this binary has forwarder analysis
+                  const forwarderData = securitySummary?.forwarder_analysis;
+                  const isForwarderDLL = forwarderData?.is_forwarder;
+                  
+                  // Get exported functions for regular DLLs
+                  const exportFunctions = functions.filter(f => 
+                    f.name?.startsWith('dll_') || 
+                    (exportsData.some(exp => exp.name === f.name)) ||
+                    (f.name && !f.name.startsWith('FUN_') && !f.name.startsWith('SUB_') && !f.is_external)
+                  );
+                  
+                  return (
+                    <Box>
+                      {/* DLL Type Detection Card */}
+                      <Card sx={{ mb: 3 }}>
+                        <CardContent>
+                          <Typography variant="h6" gutterBottom>
+                            DLL Type Analysis
+                          </Typography>
+                          
+                          {isForwarderDLL ? (
+                            <Alert severity="warning" sx={{ mb: 2 }}>
+                              <Typography variant="body1" fontWeight="bold">
+                                🔄 Windows API Forwarder DLL
+                              </Typography>
+                              <Typography variant="body2" mt={1}>
+                                This DLL contains no actual executable code. It forwards API calls to other implementation DLLs.
+                                This is normal behavior for Windows API Set DLLs.
+                              </Typography>
+                            </Alert>
+                          ) : forwarderData ? (
+                            <Alert severity="success" sx={{ mb: 2 }}>
+                              <Typography variant="body1" fontWeight="bold">
+                                ⚙️ Standard Implementation DLL
+                              </Typography>
+                              <Typography variant="body2" mt={1}>
+                                This DLL contains actual executable code and functions.
+                              </Typography>
+                            </Alert>
+                          ) : (
+                            <Alert severity="info" sx={{ mb: 2 }}>
+                              <Typography variant="body1">
+                                🔍 DLL type analysis not available
+                              </Typography>
+                              <Typography variant="body2" mt={1}>
+                                Run Security Analysis to determine DLL type and get detailed information.
+                              </Typography>
+                            </Alert>
+                          )}
+
+                          {forwarderData && (
+                            <Grid container spacing={2}>
+                              <Grid item xs={12} sm={3}>
+                                <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
+                                  <Typography variant="h5" color="primary">
+                                    {forwarderData.export_count || exportsData.length || 0}
+                                  </Typography>
+                                  <Typography variant="body2" color="textSecondary">
+                                    Total Exports
+                                  </Typography>
+                                </Paper>
+                              </Grid>
+                              
+                              <Grid item xs={12} sm={3}>
+                                <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
+                                  <Typography variant="h5" color="secondary">
+                                    {forwarderData.forwarding_entries?.length || 0}
+                                  </Typography>
+                                  <Typography variant="body2" color="textSecondary">
+                                    API Forwards
+                                  </Typography>
+                                </Paper>
+                              </Grid>
+                              
+                              <Grid item xs={12} sm={3}>
+                                <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
+                                  <Typography variant="h5" color="warning.main">
+                                    {forwarderData.function_count || exportFunctions.length || 0}
+                                  </Typography>
+                                  <Typography variant="body2" color="textSecondary">
+                                    Actual Functions
+                                  </Typography>
+                                </Paper>
+                              </Grid>
+
+                              <Grid item xs={12} sm={3}>
+                                <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
+                                  <Typography variant="h5" color="info.main">
+                                    {forwarderData.target_dlls?.length || 0}
+                                  </Typography>
+                                  <Typography variant="body2" color="textSecondary">
+                                    Target DLLs
+                                  </Typography>
+                                </Paper>
+                              </Grid>
+                            </Grid>
+                          )}
+                        </CardContent>
+                      </Card>
+
+                      {/* API Forwarder Information - shown for forwarder DLLs */}
+                      {isForwarderDLL && forwarderData?.forwarding_entries?.length > 0 && (
+                        <Card sx={{ mb: 3 }}>
+                          <CardContent>
+                            <Typography variant="h6" gutterBottom>
+                              🔄 API Forwarding Table
+                            </Typography>
+                            
+                            {/* Target DLLs */}
+                            {forwarderData.target_dlls?.length > 0 && (
+                              <Box mb={2}>
+                                <Typography variant="subtitle1" mb={1}>
+                                  Target Implementation DLLs:
+                                </Typography>
+                                <Box display="flex" flexWrap="wrap" gap={1}>
+                                  {forwarderData.target_dlls.map((dll: string, index: number) => (
+                                    <Chip
+                                      key={index}
+                                      label={dll}
+                                      variant="outlined"
+                                      color="primary"
+                                      size="small"
+                                    />
+                                  ))}
+                                </Box>
+                              </Box>
+                            )}
+
+                            <TableContainer component={Paper} variant="outlined">
+                              <Table size="small">
+                                <TableHead>
+                                  <TableRow>
+                                    <TableCell>Export Name</TableCell>
+                                    <TableCell>Target DLL</TableCell>
+                                    <TableCell>Target Function</TableCell>
+                                    <TableCell>Address</TableCell>
+                                  </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                  {forwarderData.forwarding_entries.slice(0, 50).map((entry: any, index: number) => (
+                                    <TableRow key={index}>
+                                      <TableCell>
+                                        <Typography variant="body2" fontFamily="monospace">
+                                          {entry.export_name}
+                                        </Typography>
+                                      </TableCell>
+                                      <TableCell>
+                                        <Chip
+                                          label={entry.target_dll}
+                                          size="small"
+                                          variant="outlined"
+                                          color="secondary"
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <Typography variant="body2" fontFamily="monospace">
+                                          {entry.target_function}
+                                        </Typography>
+                                      </TableCell>
+                                      <TableCell>
+                                        <Typography variant="body2" fontFamily="monospace" color="textSecondary">
+                                          {entry.export_address}
+                                        </Typography>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </TableContainer>
+                            
+                            {forwarderData.forwarding_entries.length > 50 && (
+                              <Typography variant="body2" color="textSecondary" mt={1}>
+                                Showing first 50 of {forwarderData.forwarding_entries.length} forwarding entries
+                              </Typography>
+                            )}
+                          </CardContent>
+                        </Card>
+                      )}
+
+                      {/* DLL Exported Functions - shown for regular DLLs */}
+                      {!isForwarderDLL && exportFunctions.length > 0 && (
+                        <Card>
+                          <CardContent>
+                            <Typography variant="h6" gutterBottom>
+                              ⚙️ Exported Functions ({exportFunctions.length})
+                            </Typography>
+                            
+                            {/* Export Functions Toolbar */}
+                            <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                              <Stack direction="row" spacing={1} flexWrap="wrap">
+                                <Chip 
+                                  label={`${exportFunctions.filter(f => f.is_decompiled).length} Decompiled`}
+                                  color="success"
+                                  size="small"
+                                  icon={<Code />}
+                                />
+                                <Chip 
+                                  label={`${exportFunctions.filter(f => f.ai_analyzed || f.ai_summary || f.risk_score).length} AI Analyzed`}
+                                  color="secondary"
+                                  size="small"
+                                  icon={<Psychology />}
+                                />
+                                <Chip 
+                                  label={`${exportFunctions.filter(f => f.risk_score && f.risk_score >= 50).length} High Risk`}
+                                  color="error"
+                                  size="small"
+                                  icon={<Warning />}
+                                />
+                              </Stack>
+                            </Box>
+
+                            <TableContainer component={Paper} variant="outlined">
+                              <Table>
+                                <TableHead>
+                                  <TableRow>
+                                    <TableCell>Function Name</TableCell>
+                                    <TableCell>Address</TableCell>
+                                    <TableCell>Size</TableCell>
+                                    <TableCell>Status</TableCell>
+                                    <TableCell>Risk Score</TableCell>
+                                    <TableCell>Actions</TableCell>
+                                  </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                  {exportFunctions.map((func: Function) => (
+                                    <React.Fragment key={func.id}>
+                                      <TableRow id={`export-function-${func.id}`}>
+                                        <TableCell>
+                                          <Box display="flex" alignItems="center" gap={1}>
+                                            <IconButton
+                                              size="small"
+                                              onClick={() => toggleFunctionExpanded(func.id)}
+                                              sx={{ mr: 1 }}
+                                            >
+                                              {expandedFunctions[func.id] ? <ExpandLess /> : <ExpandMore />}
+                                            </IconButton>
+                                            <Typography 
+                                              variant="body2" 
+                                              fontWeight="medium"
+                                              sx={{ color: 'primary.main' }}
+                                            >
+                                              {func.name || func.original_name || 'Unknown'}
+                                            </Typography>
+                                            <Chip label="EXPORT" size="small" color="secondary" variant="outlined" />
+                                          </Box>
+                                        </TableCell>
+                                        <TableCell>
+                                          <Typography variant="body2" fontFamily="monospace">
+                                            {func.address}
+                                          </Typography>
+                                        </TableCell>
+                                        <TableCell>
+                                          {func.size ? `${func.size} bytes` : 'Unknown'}
+                                        </TableCell>
+                                        <TableCell>
+                                          <Box display="flex" gap={1}>
+                                            {func.is_decompiled && (
+                                              <Chip label="Decompiled" color="success" size="small" />
+                                            )}
+                                            {(func.ai_analyzed || func.ai_summary) && (
+                                              <Chip label="AI Analyzed" color="secondary" size="small" />
+                                            )}
+                                          </Box>
+                                        </TableCell>
+                                        <TableCell>
+                                          {func.risk_score ? (
+                                            <Chip
+                                              label={`${func.risk_score}%`}
+                                              color={func.risk_score >= 70 ? 'error' : func.risk_score >= 40 ? 'warning' : 'success'}
+                                              size="small"
+                                            />
+                                          ) : (
+                                            <Typography variant="body2" color="textSecondary">
+                                              -
+                                            </Typography>
+                                          )}
+                                        </TableCell>
+                                        <TableCell>
+                                          <Box display="flex" gap={1}>
+                                            {!func.is_decompiled && (
+                                              <Tooltip title="Decompile Function">
+                                                <IconButton
+                                                  size="small"
+                                                  onClick={() => handleDecompileFunction(func.id)}
+                                                  disabled={functionData[func.id]?.loading?.decompiling}
+                                                  color="primary"
+                                                >
+                                                  {functionData[func.id]?.loading?.decompiling ? (
+                                                    <CircularProgress size={16} />
+                                                  ) : (
+                                                    <Code />
+                                                  )}
+                                                </IconButton>
+                                              </Tooltip>
+                                            )}
+                                            {func.is_decompiled && !functionData[func.id]?.aiExplanation && (
+                                              <Tooltip title="AI Analysis">
+                                                <IconButton
+                                                  size="small"
+                                                  onClick={() => handleExplainFunction(func.id)}
+                                                  disabled={functionData[func.id]?.loading?.explaining}
+                                                  color="secondary"
+                                                >
+                                                  {functionData[func.id]?.loading?.explaining ? (
+                                                    <CircularProgress size={16} />
+                                                  ) : (
+                                                    <Psychology />
+                                                  )}
+                                                </IconButton>
+                                              </Tooltip>
+                                            )}
+                                          </Box>
+                                        </TableCell>
+                                      </TableRow>
+                                      
+                                      {/* Expandable Function Details */}
+                                      <TableRow>
+                                        <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={6}>
+                                          <Collapse in={expandedFunctions[func.id]} timeout="auto" unmountOnExit>
+                                            <Box sx={{ margin: 1 }}>
+                                              {functionData[func.id]?.loading?.fetchingDetails ? (
+                                                <Box display="flex" justifyContent="center" p={2}>
+                                                  <CircularProgress size={24} />
+                                                </Box>
+                                              ) : (
+                                                <Grid container spacing={2}>
+                                                  {/* Function Signature */}
+                                                  <Grid item xs={12}>
+                                                    <Typography variant="subtitle2" fontWeight="bold">
+                                                      Function Signature:
+                                                    </Typography>
+                                                    <Typography variant="body2" fontFamily="monospace" sx={{ 
+                                                      backgroundColor: 'rgba(255, 255, 255, 0.05)', 
+                                                      p: 1, 
+                                                      borderRadius: 1 
+                                                    }}>
+                                                      {(() => {
+                                                        // Extract the signature string safely
+                                                        const decompiledData = functionData[func.id]?.decompiled;
+                                                        if (typeof decompiledData === 'object' && decompiledData?.signature) {
+                                                          return decompiledData.signature;
+                                                        } else if (typeof decompiledData === 'string') {
+                                                          // If it's just a string, show the function name
+                                                          return func.name || 'Unknown function';
+                                                        } else {
+                                                          return func.name || 'Not available';
+                                                        }
+                                                      })()}
+                                                    </Typography>
+                                                  </Grid>
+
+                                                  {/* Decompiled Code */}
+                                                  {func.is_decompiled && functionData[func.id]?.decompiled && (
+                                                    <Grid item xs={12}>
+                                                      <Typography variant="subtitle2" fontWeight="bold">
+                                                        Decompiled Code:
+                                                      </Typography>
+                                                      <SyntaxHighlighter 
+                                                        language="c" 
+                                                        style={atomOneDark}
+                                                        customStyle={{
+                                                          margin: 0,
+                                                          fontSize: '0.8rem',
+                                                          maxHeight: '300px',
+                                                          overflow: 'auto'
+                                                        }}
+                                                      >
+                                                        {(() => {
+                                                          // Extract the actual string from the decompiled data
+                                                          const decompiledData = functionData[func.id]?.decompiled;
+                                                          if (typeof decompiledData === 'string') {
+                                                            return decompiledData;
+                                                          } else if (decompiledData?.decompiled_code) {
+                                                            return decompiledData.decompiled_code;
+                                                          } else if (func.decompiled_code) {
+                                                            return func.decompiled_code;
+                                                          } else {
+                                                            return 'No code available';
+                                                          }
+                                                        })()}
+                                                      </SyntaxHighlighter>
+                                                    </Grid>
+                                                  )}
+                                                  
+                                                  {/* AI Analysis */}
+                                                  {functionData[func.id]?.aiExplanation && (
+                                                    <Grid item xs={12}>
+                                                      <Typography variant="subtitle2" fontWeight="bold" color="primary">
+                                                        AI Analysis:
+                                                      </Typography>
+                                                      <Paper variant="outlined" sx={{ p: 2, bgcolor: 'blue.50' }}>
+                                                        <Typography variant="body2">
+                                                          {(() => {
+                                                            // Safely extract AI explanation string
+                                                            const aiData = functionData[func.id].aiExplanation;
+                                                            if (typeof aiData === 'string') {
+                                                              return aiData;
+                                                            } else if (aiData?.ai_summary) {
+                                                              return aiData.ai_summary;
+                                                            } else if (aiData?.explanation) {
+                                                              return aiData.explanation;
+                                                            } else {
+                                                              return 'AI analysis available but format not recognized';
+                                                            }
+                                                          })()}
+                                                        </Typography>
+                                                      </Paper>
+                                                    </Grid>
+                                                  )}
+                                                </Grid>
+                                              )}
+                                            </Box>
+                                          </Collapse>
+                                        </TableCell>
+                                      </TableRow>
+                                    </React.Fragment>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </TableContainer>
+                          </CardContent>
+                        </Card>
+                      )}
+
+                      {/* No Functions Found Message */}
+                      {!isForwarderDLL && exportFunctions.length === 0 && (
+                        <Alert severity="info">
+                          <Typography variant="body1">
+                            No exported functions found for analysis.
+                          </Typography>
+                          <Typography variant="body2" mt={1}>
+                            This may be a forwarder DLL, contain only data exports, or require Security Analysis to populate data.
+                          </Typography>
+                        </Alert>
+                      )}
+                    </Box>
+                  );
+                })()}
+              </Box>
+            </TabPanel>
+
+            {/* Strings Tab */}
+            <TabPanel value={tabValue} index={2}>
+              <Box>
+                <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                  <Typography variant="h6">
+                    Strings ({stringsData.length})
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => fetchComprehensiveData('strings')}
+                    disabled={dataLoading.strings}
+                    startIcon={dataLoading.strings ? <CircularProgress size={16} /> : <Refresh />}
+                  >
+                    Refresh
+                  </Button>
+                </Box>
+                
+                {dataLoading.strings ? (
+                  <Box display="flex" justifyContent="center" p={4}>
+                    <CircularProgress />
+                  </Box>
+                ) : (
+                  <TableContainer component={Paper}>
+                    <Table>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Address</TableCell>
+                          <TableCell>Value</TableCell>
+                          <TableCell>Length</TableCell>
+                          <TableCell>Type</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {stringsData.map((str: any, index: number) => (
+                          <TableRow key={index}>
+                            <TableCell>
+                              <Typography variant="body2" fontFamily="monospace">
+                                {str.address}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="body2" sx={{ maxWidth: 300, wordBreak: 'break-all' }}>
+                                {str.value}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>{str.length}</TableCell>
+                            <TableCell>
+                              <Chip label={str.dataType || str.type || 'String'} size="small" variant="outlined" />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
+              </Box>
+            </TabPanel>
+
+            {/* Symbols Tab */}
+            <TabPanel value={tabValue} index={3}>
+              <Box>
+                <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                  <Typography variant="h6">
+                    Symbols ({symbolsData.length})
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => fetchComprehensiveData('symbols')}
+                    disabled={dataLoading.symbols}
+                    startIcon={dataLoading.symbols ? <CircularProgress size={16} /> : <Refresh />}
+                  >
+                    Refresh
+                  </Button>
+                </Box>
+                
+                {dataLoading.symbols ? (
+                  <Box display="flex" justifyContent="center" p={4}>
+                    <CircularProgress />
+                  </Box>
+                ) : (
+                  <TableContainer component={Paper}>
+                    <Table>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Name</TableCell>
+                          <TableCell>Address</TableCell>
+                          <TableCell>Type</TableCell>
+                          <TableCell>Source</TableCell>
+                          <TableCell>Namespace</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {symbolsData.map((symbol: any, index: number) => (
+                          <TableRow key={index}>
+                            <TableCell>
+                              <Typography variant="body2" fontFamily="monospace">
+                                {symbol.name}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="body2" fontFamily="monospace">
+                                {symbol.address}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Chip label={symbol.type || symbol.symbol_type} size="small" variant="outlined" />
+                            </TableCell>
+                            <TableCell>{symbol.source}</TableCell>
+                            <TableCell>{symbol.namespace}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
+              </Box>
+            </TabPanel>
+
+            {/* Memory Blocks Tab */}
+            <TabPanel value={tabValue} index={4}>
+              <Box>
+                <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                  <Typography variant="h6">
+                    Memory Blocks ({memoryBlocksData.length})
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => fetchComprehensiveData('memory_blocks')}
+                    disabled={dataLoading.memory}
+                    startIcon={dataLoading.memory ? <CircularProgress size={16} /> : <Refresh />}
+                  >
+                    Refresh
+                  </Button>
+                </Box>
+                
+                {dataLoading.memory ? (
+                  <Box display="flex" justifyContent="center" p={4}>
+                    <CircularProgress />
+                  </Box>
+                ) : (
+                  <TableContainer component={Paper}>
+                    <Table>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Name</TableCell>
+                          <TableCell>Start Address</TableCell>
+                          <TableCell>End Address</TableCell>
+                          <TableCell>Size</TableCell>
+                          <TableCell>Permissions</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {memoryBlocksData.map((block: any, index: number) => (
+                          <TableRow key={index}>
+                            <TableCell>
+                              <Typography variant="body2" fontWeight="bold">
+                                {block.name}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="body2" fontFamily="monospace">
+                                {block.start_address || block.start}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="body2" fontFamily="monospace">
+                                {block.end_address || block.end}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>{formatFileSize(block.size)}</TableCell>
+                            <TableCell>
+                              <Stack direction="row" spacing={0.5}>
+                                {(block.is_read || block.permissions?.read) && <Chip label="R" size="small" color="success" />}
+                                {(block.is_write || block.permissions?.write) && <Chip label="W" size="small" color="warning" />}
+                                {(block.is_execute || block.permissions?.execute) && <Chip label="X" size="small" color="error" />}
+                                {(block.is_initialized || block.permissions?.initialized) && <Chip label="I" size="small" color="info" />}
+                              </Stack>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
+              </Box>
+            </TabPanel>
+
+            {/* Imports/Exports Tab */}
+            <TabPanel value={tabValue} index={5}>
+              <Box>
+                <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                  <Typography variant="h6">
+                    Imports ({importsData.length}) / Exports ({exportsData.length})
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => Promise.all([fetchComprehensiveData('imports'), fetchComprehensiveData('exports')])}
+                    disabled={dataLoading.imports}
+                    startIcon={dataLoading.imports ? <CircularProgress size={16} /> : <Refresh />}
+                  >
+                    Refresh
+                  </Button>
+                </Box>
+                
+                <Grid container spacing={3}>
+                  {/* Imports Section */}
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="h6" color="primary" mb={2}>
+                      Imports ({importsData.length})
+                    </Typography>
+                    {dataLoading.imports ? (
+                      <Box display="flex" justifyContent="center" p={2}>
+                        <CircularProgress size={24} />
+                      </Box>
+                    ) : (
+                      <TableContainer component={Paper} sx={{ maxHeight: 400 }}>
+                        <Table stickyHeader size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>Function</TableCell>
+                              <TableCell>Library</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {importsData.map((imp: any, index: number) => (
+                              <TableRow key={index}>
+                                <TableCell>
+                                  <Typography variant="body2" fontFamily="monospace">
+                                    {imp.function_name || imp.name}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell>
+                                  <Typography variant="body2">
+                                    {imp.library || imp.module}
+                                  </Typography>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    )}
+                  </Grid>
+                  
+                  {/* Exports Section */}
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="h6" color="secondary" mb={2}>
+                      Exports ({exportsData.length})
+                    </Typography>
+                    {dataLoading.imports ? (
+                      <Box display="flex" justifyContent="center" p={2}>
+                        <CircularProgress size={24} />
+                      </Box>
+                    ) : (
+                      <TableContainer component={Paper} sx={{ maxHeight: 400 }}>
+                        <Table stickyHeader size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>Function</TableCell>
+                              <TableCell>Address</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {exportsData.map((exp: any, index: number) => (
+                              <TableRow key={index}>
+                                <TableCell>
+                                  <Typography variant="body2" fontFamily="monospace">
+                                    {exp.function_name || exp.name}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell>
+                                  <Typography variant="body2" fontFamily="monospace">
+                                    {exp.address}
+                                  </Typography>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    )}
+                  </Grid>
+                </Grid>
+              </Box>
+            </TabPanel>
+
+            {/* Security Analysis Tab */}
+            <TabPanel value={tabValue} index={6}>
               <UnifiedSecurityDashboard
                 binary={binaryDetails?.binary}
                 functions={functions}
@@ -2961,7 +3857,8 @@ const BinaryDetails: React.FC = () => {
               />
             </TabPanel>
 
-            <TabPanel value={tabValue} index={2}>
+            {/* Fuzzing Tab */}
+            <TabPanel value={tabValue} index={7}>
               <SimpleFuzzingInterface 
                 binaryId={binaryId!} 
                 functions={functions} 

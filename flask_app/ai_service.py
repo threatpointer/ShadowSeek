@@ -25,6 +25,17 @@ class AIService:
             api_key: OpenAI API key (if None, will try to get from environment)
             model: OpenAI model to use
         """
+        # Force reload environment variables to get latest config
+        if api_key is None:
+            try:
+                from dotenv import load_dotenv
+                load_dotenv(override=True)  # Reload .env with override
+                logger.debug("Reloaded environment variables from .env file")
+            except ImportError:
+                logger.debug("python-dotenv not available, using os.environ")
+            except Exception as e:
+                logger.debug(f"Error reloading .env file: {e}")
+        
         self.api_key = api_key or os.getenv('OPENAI_API_KEY')
         self.model = model
         self.client = None
@@ -32,12 +43,14 @@ class AIService:
         if self.api_key:
             try:
                 self.client = OpenAI(api_key=self.api_key)
-                logger.info(f"AI Service initialized with model: {model}")
+                logger.info(f"AI Service initialized successfully with model: {model}")
+                logger.info(f"API key configured: {'*' * (len(self.api_key) - 10) + self.api_key[-4:] if len(self.api_key) > 10 else '***'}")
             except Exception as e:
                 logger.error(f"Failed to initialize OpenAI client: {e}")
                 self.client = None
         else:
             logger.warning("OpenAI API key not found. AI explanations will not work.")
+            logger.debug("Make sure OPENAI_API_KEY is set in your .env file")
     
     def explain_function(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """

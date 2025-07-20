@@ -18,16 +18,30 @@ echo Ghidra Bridge Startup Log >> %LOG_FILE%
 echo Started at: %datestamp% >> %LOG_FILE%
 echo ======================================== >> %LOG_FILE%
 
-:: Set Ghidra path from .env file or use default
-set GHIDRA_PATH=D:\1132-Ghidra\ghidra_11.3.2_PUBLIC
-if exist .env (
-    echo Loading GHIDRA_INSTALL_DIR from .env file... >> %LOG_FILE%
-    for /F "tokens=1,2 delims==" %%a in (.env) do (
-        if "%%a"=="GHIDRA_INSTALL_DIR" (
-            set GHIDRA_PATH=%%b
-            echo Found GHIDRA_INSTALL_DIR: %%b >> %LOG_FILE%
+:: Set Ghidra path from .env file or environment variable
+if defined GHIDRA_INSTALL_DIR (
+    set GHIDRA_PATH=%GHIDRA_INSTALL_DIR%
+    echo Using GHIDRA_INSTALL_DIR from environment: %GHIDRA_PATH% >> %LOG_FILE%
+) else (
+    echo GHIDRA_INSTALL_DIR not set in environment, checking .env file... >> %LOG_FILE%
+    set GHIDRA_PATH=
+    if exist .env (
+        echo Loading GHIDRA_INSTALL_DIR from .env file... >> %LOG_FILE%
+        for /F "tokens=1,2 delims==" %%a in (.env) do (
+            if "%%a"=="GHIDRA_INSTALL_DIR" (
+                set GHIDRA_PATH=%%b
+                echo Found GHIDRA_INSTALL_DIR: %%b >> %LOG_FILE%
+            )
         )
     )
+)
+
+if "%GHIDRA_PATH%"=="" (
+    echo ERROR: GHIDRA_INSTALL_DIR not found in environment or .env file >> %LOG_FILE%
+    echo ERROR: GHIDRA_INSTALL_DIR not found in environment or .env file
+    echo Please set GHIDRA_INSTALL_DIR environment variable or add it to .env file
+    pause
+    exit /b 1
 )
 
 echo Using Ghidra path: %GHIDRA_PATH% >> %LOG_FILE%

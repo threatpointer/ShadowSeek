@@ -2,6 +2,12 @@
 
 🔍 **Enterprise-grade binary security analysis with AI-powered vulnerability detection and intelligent fuzzing harness generation**
 
+> ⚠️ **Important**: All system-dependent hardcoded paths have been removed for portability. Use our **automated setup scripts** for easy configuration!
+> 
+> 🚀 **Quick Setup**: Run `python setup_environment.py` (recommended) or `setup_environment.bat` (Windows) to automatically configure your environment.
+> 
+> 📚 **Documentation**: See [SETUP_SCRIPTS_README.md](SETUP_SCRIPTS_README.md) for setup guide and [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md) for manual configuration.
+
 ## 🌟 Platform Overview
 
 ShadowSeek is a revolutionary binary security analysis platform that transforms traditional reverse engineering into an intelligent, automated, and AI-enhanced workflow. Built on NSA's Ghidra framework, ShadowSeek provides enterprise-grade security analysis capabilities suitable for security professionals, vulnerability researchers, and enterprise security teams.

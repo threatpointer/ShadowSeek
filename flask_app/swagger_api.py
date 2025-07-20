@@ -116,10 +116,10 @@ def create_swagger_api(app: Flask):
         'binary': fields.Nested(binary_model, description='Uploaded binary details'),
         'auto_analysis': fields.Nested(api.model('AutoAnalysis', {
             'task_id': fields.String(description='Analysis task ID', example='550e8400-e29b-41d4-a716-446655440001'),
-            'analysis_type': fields.String(description='Type of analysis', example='comprehensive'),
+            'analysis_type': fields.String(description='Type of analysis', example='comprehensive_analysis'),
             'status': fields.String(description='Analysis status', example='started'),
             'error': fields.String(description='Error message if failed')
-        }), description='Automatic analysis details')
+        }), description='Automatic comprehensive analysis details')
     })
 
     # File upload parser
@@ -199,14 +199,14 @@ def create_swagger_api(app: Flask):
             pass
 
         @binary_ns.doc('upload_binary',
-            description='Upload a binary file for analysis. Automatically starts comprehensive analysis for fresh uploads.')
+            description='Upload a binary file for analysis. Automatically starts comprehensive analysis for fresh uploads including decompilation, security analysis, and AI insights.')
         @binary_ns.expect(upload_parser)
         @binary_ns.marshal_with(upload_response_model, code=201)
-        @binary_ns.response(201, 'Binary uploaded successfully')
+        @binary_ns.response(201, 'Binary uploaded successfully with comprehensive analysis started')
         @binary_ns.response(400, 'Bad Request - Invalid file type or missing file', error_model)
         @binary_ns.response(500, 'Internal Server Error', error_model)
         def post(self):
-            """Upload a new binary file for analysis"""
+            """Upload a new binary file and start comprehensive security analysis"""
             pass
 
     @binary_ns.route('/<string:binary_id>')

@@ -69,11 +69,31 @@ start "Ghidra Bridge Server" cmd /c "start_ghidra_bridge_new.bat"
 echo Waiting for Ghidra Bridge to initialize (fixed version)...
 timeout /t 15 > nul
 
-REM Start Flask backend
-echo Starting Flask backend...
-start "Flask Backend" cmd /c "python run.py && pause"
+REM Start Flask backend using UV virtual environment
+echo Starting Flask backend with virtual environment...
+echo Checking virtual environment...
+
+REM Check if virtual environment exists
+if not exist ".venv\Scripts\python.exe" (
+    echo ERROR: Virtual environment not found at .venv\Scripts\python.exe
+    echo Please run setup_environment.py first to create the virtual environment
+    pause
+    exit /b 1
+)
+
+echo Virtual environment found: .venv\Scripts\python.exe
+echo Testing Flask imports in virtual environment...
+".venv\Scripts\python.exe" -c "import flask, flask_sqlalchemy, flask_cors; print('Flask imports OK')" 2>nul
+if %ERRORLEVEL% neq 0 (
+    echo ERROR: Flask dependencies not found in virtual environment
+    echo Installing dependencies...
+    ".venv\Scripts\activate.bat" && uv pip install flask flask-sqlalchemy flask-cors python-dotenv ghidra-bridge
+)
+
+echo Starting Flask with virtual environment Python...
+start "Flask Backend" cmd /c "cd /d "%CD%" && .venv\Scripts\python.exe run.py && pause"
 echo Waiting for Flask to initialize...
-timeout /t 5 > nul
+timeout /t 8 > nul
 
 REM Check if frontend directory exists
 if exist frontend (

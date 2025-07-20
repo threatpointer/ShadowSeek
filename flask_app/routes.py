@@ -259,13 +259,13 @@ def upload_binary():
         db.session.add(binary)
         db.session.commit()
         
-        # Automatically start basic analysis for fresh uploads
+        # Automatically start comprehensive analysis for fresh uploads
         try:
-            logger.info(f"Starting automatic basic analysis for new binary {binary_id}")
+            logger.info(f"Starting automatic comprehensive analysis for new binary {binary_id}")
             
-            # Start basic analysis task
+            # Start comprehensive analysis task
             task_id = current_app.task_manager.start_task(
-                task_type='basic',
+                task_type='comprehensive_analysis',
                 binary_id=binary_id,
                 binary_path=binary.file_path,
                 priority=3  # High priority for fresh uploads
@@ -275,22 +275,22 @@ def upload_binary():
             binary.analysis_status = 'analyzing'
             db.session.commit()
             
-            logger.info(f"Automatic basic analysis started with task ID: {task_id}")
+            logger.info(f"Automatic comprehensive analysis started with task ID: {task_id}")
             
             # Return binary details with analysis task info
             return jsonify({
-                'message': 'File uploaded successfully and basic analysis started',
+                'message': 'File uploaded successfully and comprehensive analysis started',
                 'binary': binary.to_dict(),
                 'auto_analysis': {
                     'task_id': task_id,
-                    'analysis_type': 'basic',
+                    'analysis_type': 'comprehensive_analysis',
                     'status': 'started'
                 }
             }), 201
             
         except Exception as analysis_error:
             # If automatic analysis fails, still return success for upload
-            logger.error(f"Failed to start automatic basic analysis: {analysis_error}")
+            logger.error(f"Failed to start automatic comprehensive analysis: {analysis_error}")
             
             # Return binary details without analysis
             return jsonify({
@@ -1524,60 +1524,140 @@ def get_function_security_findings(function_id):
 
 @api_bp.route('/binaries/<binary_id>/security-analysis', methods=['POST'])
 def analyze_binary_security(binary_id):
-    """Perform comprehensive unified security analysis on all functions in a binary with 75+ dangerous function checks"""
+    """Perform comprehensive security analysis on a binary - uses enhanced analysis if functions unavailable"""
     try:
-        from .unified_security_analyzer import UnifiedSecurityAnalyzer
-        
         binary = Binary.query.get(binary_id)
         if not binary:
             return jsonify({'error': 'Binary not found'}), 404
         
-        # Get decompiled functions
+        # Try traditional function-based analysis first
         functions = Function.query.filter_by(binary_id=binary_id, is_decompiled=True).all()
         
-        if not functions:
-            return jsonify({'error': 'No decompiled functions found. Please decompile functions first.'}), 400
-        
-        logger.info(f"Starting comprehensive unified security analysis for binary {binary_id} ({len(functions)} functions)")
-        
-        analyzer = UnifiedSecurityAnalyzer()
-        results = []
-        total_findings = 0
-        failed_functions = 0
-        
-        for function in functions:
-            try:
-                result = analyzer.analyze_function_security(function)
-                if result.get('success'):
-                    total_findings += result.get('stored_findings', 0)
-                    results.append({
-                        'function_id': function.id,
-                        'function_name': function.name or function.address,
-                        'findings': result.get('stored_findings', 0),
-                        'high_confidence_findings': result.get('high_confidence_findings', 0)
-                    })
-                else:
-                    failed_functions += 1
-                    logger.warning(f"Unified security analysis failed for function {function.id}: {result.get('error')}")
-                    
-            except Exception as e:
+        if functions and len(functions) > 0:
+            # Use traditional unified security analyzer for decompiled functions
+            logger.info(f"Using traditional security analysis for binary {binary_id} ({len(functions)} functions)")
+            return _traditional_security_analysis(binary_id, functions)
+        else:
+            # Use enhanced security analyzer for comprehensive analysis without functions
+            logger.info(f"Using enhanced security analysis for binary {binary_id} (no decompiled functions)")
+            return _enhanced_security_analysis(binary_id)
+            
+    except Exception as e:
+        logger.error(f"Error in security analysis for binary {binary_id}: {e}")
+        return jsonify({'error': f'Security analysis failed: {str(e)}'}), 500
+
+def _traditional_security_analysis(binary_id, functions):
+    """Traditional function-based security analysis"""
+    from .unified_security_analyzer import UnifiedSecurityAnalyzer
+    
+    analyzer = UnifiedSecurityAnalyzer()
+    results = []
+    total_findings = 0
+    failed_functions = 0
+    
+    for function in functions:
+        try:
+            result = analyzer.analyze_function_security(function)
+            if result.get('success'):
+                total_findings += result.get('stored_findings', 0)
+                results.append({
+                    'function_id': function.id,
+                    'function_name': function.name or function.address,
+                    'findings': result.get('stored_findings', 0),
+                    'high_confidence_findings': result.get('high_confidence_findings', 0)
+                })
+            else:
                 failed_functions += 1
-                logger.error(f"Error analyzing function {function.id}: {e}")
+                logger.warning(f"Unified security analysis failed for function {function.id}: {result.get('error')}")
+                
+        except Exception as e:
+            failed_functions += 1
+            logger.error(f"Error analyzing function {function.id}: {e}")
+    
+    logger.info(f"Traditional security analysis completed for binary {binary_id}: {total_findings} total findings")
+    
+    return jsonify({
+        'success': True,
+        'analysis_type': 'traditional',
+        'binary_id': binary_id,
+        'functions_analyzed': len(functions) - failed_functions,
+        'functions_failed': failed_functions,
+        'total_findings': total_findings,
+        'function_results': results,
+        'analyzer_used': 'unified_security_analyzer'
+    })
+
+def _enhanced_security_analysis(binary_id):
+    """Enhanced security analysis using multiple data sources and automatic export decompilation"""
+    from .enhanced_security_analyzer import EnhancedSecurityAnalyzer
+    
+    binary = Binary.query.get(binary_id)
+    if not binary:
+        return jsonify({'error': 'Binary not found'}), 404
+    
+    analyzer = EnhancedSecurityAnalyzer()
+    result = analyzer.analyze_binary_security(binary)
+    
+    if result.get('success'):
+        analysis_methods = result.get('analysis_methods', [])
+        coverage = result.get('coverage_analysis', {})
         
-        logger.info(f"Comprehensive unified security analysis completed for binary {binary_id}: {total_findings} total findings")
+        # Check if export decompilation was performed
+        export_decompilation = coverage.get('export_decompilation', {})
+        traditional_analysis = coverage.get('traditional_analysis', {})
+        
+        logger.info(f"Enhanced security analysis completed for binary {binary_id}: "
+                   f"{result.get('total_findings', 0)} findings using {len(analysis_methods)} methods")
         
         return jsonify({
             'success': True,
+            'analysis_type': 'enhanced',
             'binary_id': binary_id,
-            'functions_analyzed': len(functions) - failed_functions,
-            'functions_failed': failed_functions,
-            'total_findings': total_findings,
-            'function_results': results,
-            'analyzer_used': 'unified_security_analyzer'
+            'total_findings': result.get('total_findings', 0),
+            'analysis_methods': analysis_methods,
+            'coverage_analysis': coverage,
+            'findings': result.get('stored_findings', []),
+            'analyzer_used': 'enhanced_security_analyzer',
+            'export_decompilation': {
+                'performed': bool(export_decompilation),
+                'exports_decompiled': export_decompilation.get('exports_decompiled', 0),
+                'functions_created': export_decompilation.get('functions_stored', 0)
+            },
+            'traditional_analysis': {
+                'performed': bool(traditional_analysis),
+                'functions_analyzed': traditional_analysis.get('metadata', {}).get('functions_analyzed', 0)
+            }
         })
+    else:
+        error_msg = result.get('error', 'Enhanced security analysis failed')
+        logger.error(f"Enhanced security analysis failed for binary {binary_id}: {error_msg}")
+        return jsonify({'error': error_msg}), 500
+
+@api_bp.route('/binaries/<binary_id>/enhanced-security-analysis', methods=['POST'])
+def analyze_binary_enhanced_security(binary_id):
+    """Perform enhanced security analysis using multiple data sources (exports, strings, imports, AI)"""
+    try:
+        binary = Binary.query.get(binary_id)
+        if not binary:
+            return jsonify({'error': 'Binary not found'}), 404
         
+        logger.info(f"Starting enhanced security analysis for binary {binary_id}")
+        
+        from .enhanced_security_analyzer import EnhancedSecurityAnalyzer
+        analyzer = EnhancedSecurityAnalyzer()
+        result = analyzer.analyze_binary_security(binary)
+        
+        if result.get('success'):
+            logger.info(f"Enhanced security analysis completed for binary {binary_id}: "
+                       f"{result.get('total_findings', 0)} findings")
+            return jsonify(result)
+        else:
+            error_msg = result.get('error', 'Enhanced security analysis failed')
+            logger.error(f"Enhanced security analysis failed for binary {binary_id}: {error_msg}")
+            return jsonify(result), 500
+            
     except Exception as e:
-        logger.error(f"Error in comprehensive unified security analysis for binary {binary_id}: {e}")
+        logger.error(f"Error in enhanced security analysis for binary {binary_id}: {e}")
         return jsonify({'error': f'Comprehensive unified security analysis failed: {str(e)}'}), 500
 
 @api_bp.route('/binaries/<binary_id>/security-findings', methods=['GET'])
@@ -2879,7 +2959,7 @@ def get_configuration():
             'llm_temperature': float(config_values.get('LLM_TEMPERATURE', '0.3')),
             
             # Ghidra Settings
-            'ghidra_install_dir': config_values.get('GHIDRA_INSTALL_DIR', 'D:\\Ghidra\\ghidra_11.3_PUBLIC'),
+            'ghidra_install_dir': config_values.get('GHIDRA_INSTALL_DIR', ''),
             'ghidra_bridge_port': int(config_values.get('GHIDRA_BRIDGE_PORT', '4768')),
             'ghidra_max_processes': int(config_values.get('GHIDRA_MAX_PROCESSES', '4')),
             'ghidra_timeout': int(config_values.get('GHIDRA_TIMEOUT', '3600')),
@@ -2999,15 +3079,66 @@ def update_configuration():
         
         logger.info(f"Configuration updated successfully. Updated {len(updates)} settings.")
         
+        # If OpenAI API key was updated, reload AI services
+        if 'OPENAI_API_KEY' in updates:
+            try:
+                logger.info("OpenAI API key updated - reloading AI services")
+                
+                # Reload AI service in task manager
+                current_app.task_manager.reload_ai_service()
+                
+                # Reload AI service in enhanced security analyzer
+                from flask_app.enhanced_security_analyzer import EnhancedSecurityAnalyzer
+                analyzer = EnhancedSecurityAnalyzer()
+                analyzer.reload_ai_service()
+                
+                logger.info("AI services successfully reloaded with new API key")
+                
+            except Exception as e:
+                logger.error(f"Error reloading AI services: {e}")
+        
         return jsonify({
             'status': 'success',
             'message': f'Configuration updated successfully. Updated {len(updates)} settings.',
-            'updated_keys': list(updates.keys())
+            'updated_keys': list(updates.keys()),
+            'ai_services_reloaded': 'OPENAI_API_KEY' in updates
         })
         
     except Exception as e:
         logger.error(f"Error updating configuration: {e}")
         return jsonify({'error': f'Failed to save configuration: {str(e)}'}), 500
+
+@api_bp.route('/ai/status', methods=['GET'])
+def get_ai_status():
+    """Get current AI service status"""
+    try:
+        from flask_app.enhanced_security_analyzer import EnhancedSecurityAnalyzer
+        
+        # Check task manager AI service
+        tm_ai_service = current_app.task_manager._get_ai_service()
+        tm_status = {
+            'initialized': tm_ai_service.client is not None,
+            'api_key_configured': tm_ai_service.api_key is not None,
+            'model': tm_ai_service.model
+        }
+        
+        # Check enhanced security analyzer AI service  
+        analyzer = EnhancedSecurityAnalyzer()
+        esa_status = {
+            'initialized': analyzer.ai_service.client is not None,
+            'api_key_configured': analyzer.ai_service.api_key is not None,
+            'model': analyzer.ai_service.model
+        }
+        
+        return jsonify({
+            'task_manager_ai': tm_status,
+            'enhanced_security_analyzer_ai': esa_status,
+            'overall_status': 'ready' if (tm_status['initialized'] and esa_status['initialized']) else 'not_configured'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error checking AI status: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @api_bp.route('/config/test-connection', methods=['POST'])
 def test_ai_connection():
