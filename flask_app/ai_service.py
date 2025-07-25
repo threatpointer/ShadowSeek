@@ -8,7 +8,7 @@ import re
 import json
 import logging
 from openai import OpenAI
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from flask import current_app
 
 # Configure logging
@@ -30,11 +30,10 @@ class AIService:
             try:
                 from dotenv import load_dotenv
                 load_dotenv(override=True)  # Reload .env with override
-                logger.debug("Reloaded environment variables from .env file")
             except ImportError:
-                logger.debug("python-dotenv not available, using os.environ")
+                pass
             except Exception as e:
-                logger.debug(f"Error reloading .env file: {e}")
+                logger.warning(f"Error reloading .env file: {e}")
         
         self.api_key = api_key or os.getenv('OPENAI_API_KEY')
         self.model = model
@@ -50,7 +49,7 @@ class AIService:
                 self.client = None
         else:
             logger.warning("OpenAI API key not found. AI explanations will not work.")
-            logger.debug("Make sure OPENAI_API_KEY is set in your .env file")
+            logger.info("Make sure OPENAI_API_KEY is set in your .env file")
     
     def explain_function(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -115,13 +114,14 @@ class AIService:
             logger.info(f"Received AI response for function {function_name} ({len(ai_response)} chars)")
             
             # Extract structured information from response
-            explanation, risk_score, vulnerabilities = self._parse_ai_response(ai_response)
+            explanation, risk_score, vulnerabilities, contextual_analysis = self._parse_ai_response(ai_response)
             
             return {
                 "success": True,
                 "explanation": explanation,
                 "risk_score": risk_score,
                 "vulnerabilities": vulnerabilities,
+                "contextual_analysis": contextual_analysis,
                 "raw_response": ai_response,
                 "model_used": self.model
             }
@@ -137,19 +137,9 @@ class AIService:
                              code: str, signature: str, size: int) -> str:
         """
         Build prompt for AI analysis
-        
-        Args:
-            function_name: Name of the function
-            address: Memory address
-            code: Decompiled C code
-            signature: Function signature
-            size: Function size in bytes
-            
-        Returns:
-            Formatted prompt string
         """
         prompt = f"""
-You are a senior reverse engineer and vulnerability researcher. Analyze this decompiled function with extreme technical detail for a technical audience:
+You are a senior reverse engineer analyzing this decompiled function for security risks.
 
 **Function Information:**
 - Name: {function_name}
@@ -162,59 +152,28 @@ You are a senior reverse engineer and vulnerability researcher. Analyze this dec
 {code}
 ```
 
-**Provide comprehensive technical analysis:**
+**Provide a BRIEF security analysis (3-4 sentences maximum):**
 
-1. **FUNCTION SUMMARY** (2-3 sentences): Core purpose and primary functionality.
+1. **FUNCTION SUMMARY**: What does this function do and what is its primary purpose?
 
-2. **TECHNICAL ANALYSIS**:
-   - **Control Flow**: Analyze loops, conditionals, branching logic, and execution paths
-   - **Data Types & Arguments**: Examine function parameters, local variables, their types, and usage patterns
-   - **Memory Operations**: Detail malloc/free patterns, stack usage, heap operations, pointer arithmetic
-   - **API/System Calls**: Identify external function calls, system APIs, library dependencies
-   - **Algorithms**: Describe any cryptographic, compression, parsing, or mathematical algorithms
-   - **String/Buffer Handling**: Analyze string operations, buffer manipulations, size calculations
+2. **SECURITY RISK ASSESSMENT**: What are the main security concerns? Look for buffer operations, memory management, input validation, dangerous API calls, or other potential vulnerabilities.
 
-3. **LOGICAL FLOW ANALYSIS**:
-   - **Conditions**: Detail conditional checks, validation logic, error handling paths
-   - **Input Processing**: How inputs are received, validated, transformed, and used
-   - **Output Generation**: What data is produced, how it's formatted, and where it goes
-   - **State Management**: Any global variables, static data, or persistent state handling
+3. **RISK SCORE** (0-100): Assign a risk score based on the following criteria:
+   - Only assign a score above 60 (High/Critical) if there is clear evidence of:
+       - Remote code execution (RCE)
+       - Memory corruption (e.g., buffer overflow, use-after-free)
+       - Direct exposure of highly sensitive data (e.g., cryptographic keys, passwords)
+       - Privilege escalation or system compromise
+   - For simple getter functions that return a static value or memory address, default to Low (21-40) or Medium (41-60) risk unless you have strong evidence the returned value is highly sensitive or misused elsewhere.
+   - If the function's risk depends on how its return value is used elsewhere, state this and assign a conservative (lower) risk score.
 
-4. **ATTACK SURFACE ASSESSMENT**:
-   - **Input Vectors**: Command-line args, file inputs, network data, user inputs, environment variables
-   - **Trust Boundaries**: Where external data enters, privilege transitions, validation points
-   - **Memory Corruption**: Buffer overflows, underflows, use-after-free, double-free opportunities
-   - **Logic Flaws**: TOCTOU races, integer overflows, format string bugs, injection points
-   - **Information Disclosure**: Potential data leaks, uninitialized memory, debug information
-   - **Denial of Service**: Resource exhaustion, infinite loops, crash conditions
+**CONTEXTUAL ANALYSIS:** If possible, consider:
+- Where is this function called?
+- How is its return value used?
+- Is the returned value used in a security-sensitive context (e.g., authentication, cryptography, access control)?
+If you cannot determine this, mention it in your assessment and avoid assigning a high/critical risk score.
 
-5. **VULNERABILITY ANALYSIS**:
-   - **High-Risk Patterns**: Identify dangerous function calls, unchecked operations, unsafe casts
-   - **Exploitation Scenarios**: Concrete attack vectors and exploitation techniques
-   - **Bypass Potential**: Ways to circumvent security checks or validation logic
-   - **Chaining Opportunities**: How this function could be used in multi-stage attacks
-
-6. **RISK SCORING** (0-100):
-   - **0-20**: Minimal risk - well-bounded, validated inputs, safe operations
-   - **21-40**: Low risk - minor issues, hard to exploit, limited impact
-   - **41-60**: Medium risk - exploitable vulnerabilities with moderate impact
-   - **61-80**: High risk - easily exploitable, significant impact potential
-   - **81-100**: Critical risk - remote code execution, privilege escalation, or system compromise
-
-7. **TECHNICAL RECOMMENDATIONS**:
-   - **Code Hardening**: Specific security improvements with code examples
-   - **Input Validation**: Detailed validation requirements and implementation suggestions
-   - **Memory Safety**: Bounds checking, allocation patterns, defensive programming
-   - **Monitoring**: Logging, instrumentation, and detection opportunities
-
-**Focus on:**
-- Precise technical details, not generic descriptions
-- Actual variable names, data types, and memory layouts from the code
-- Specific line-by-line analysis where security-relevant
-- Concrete exploitation techniques and mitigation strategies
-- Real-world attack scenarios relevant to this function's context
-
-Be thorough, technical, and actionable for security researchers and developers.
+Keep your response concise and focused on the most important security-relevant observations. Avoid lengthy technical details - just highlight key risks and concerns.
 """
         return prompt
     
@@ -226,33 +185,56 @@ Be thorough, technical, and actionable for security researchers and developers.
             response: Raw AI response text
             
         Returns:
-            Tuple of (explanation, risk_score, vulnerabilities)
+            Tuple of (explanation, risk_score, vulnerabilities, contextual_analysis)
         """
         try:
-            # Extract function summary/explanation
+            # For brief analysis, combine function summary and security assessment into explanation
+            explanation = ""
+            
+            # Extract function summary
             summary_patterns = [
                 r'\*\*FUNCTION SUMMARY\*\*(.*?)(?=\*\*|$)',
-                r'\*\*SUMMARY\*\*(.*?)(?=\*\*|$)',
                 r'1\.\s*\*\*FUNCTION SUMMARY\*\*(.*?)(?=\d+\.\s*\*\*|$)'
             ]
             
-            explanation = ""
+            function_summary = ""
             for pattern in summary_patterns:
                 summary_match = re.search(pattern, response, re.DOTALL | re.IGNORECASE)
                 if summary_match:
-                    explanation = summary_match.group(1).strip()
+                    function_summary = summary_match.group(1).strip()
                     break
             
-            if not explanation:
-                # Fallback: use first meaningful paragraph
-                paragraphs = [p.strip() for p in response.split('\n\n') if p.strip()]
-                explanation = paragraphs[0] if paragraphs else response[:500]
+            # Extract security risk assessment
+            security_patterns = [
+                r'\*\*SECURITY RISK ASSESSMENT\*\*(.*?)(?=\*\*|$)',
+                r'2\.\s*\*\*SECURITY RISK ASSESSMENT\*\*(.*?)(?=\d+\.\s*\*\*|$)'
+            ]
+            
+            security_assessment = ""
+            for pattern in security_patterns:
+                security_match = re.search(pattern, response, re.DOTALL | re.IGNORECASE)
+                if security_match:
+                    security_assessment = security_match.group(1).strip()
+                    break
+            
+            # Combine both sections for the explanation
+            if function_summary and security_assessment:
+                explanation = f"{function_summary}\n\n{security_assessment}".strip()
+            elif function_summary:
+                explanation = function_summary
+            elif security_assessment:
+                explanation = security_assessment
+            else:
+                # Fallback: use entire response but clean it up
+                explanation = response.strip()
+                # Remove risk score section if present
+                explanation = re.sub(r'\*\*RISK SCORE\*\*.*$', '', explanation, flags=re.DOTALL | re.IGNORECASE).strip()
             
             # Extract risk score with improved patterns
             risk_score = 0
             risk_patterns = [
-                r'\*\*RISK SCORING\*\*.*?(\d+)',
                 r'\*\*RISK SCORE\*\*.*?(\d+)',
+                r'3\.\s*\*\*RISK SCORE\*\*.*?(\d+)',
                 r'Risk Score[:\s]*(\d+)',
                 r'Score[:\s]*(\d+)\/100',
                 r'(\d+)\/100'
@@ -266,51 +248,44 @@ Be thorough, technical, and actionable for security researchers and developers.
                         risk_score = potential_score
                         break
             
-            # Enhanced vulnerability extraction
+            # For brief analysis, extract vulnerabilities from security assessment
             vulnerabilities = []
+            if security_assessment:
+                # Look for specific vulnerability mentions in the brief assessment
+                vuln_keywords = [
+                    'buffer overflow', 'memory corruption', 'injection', 'validation',
+                    'unsafe', 'unchecked', 'vulnerable', 'exploit', 'overflow',
+                    'underflow', 'race condition', 'format string'
+                ]
+                
+                assessment_lower = security_assessment.lower()
+                for keyword in vuln_keywords:
+                    if keyword in assessment_lower:
+                        vulnerabilities.append({
+                            'type': keyword.replace(' ', '_'),
+                            'description': f"Potential {keyword} vulnerability identified"
+                        })
             
-            # Search in multiple sections
-            vuln_sections = [
-                r'\*\*ATTACK SURFACE ASSESSMENT\*\*(.*?)(?=\*\*|$)',
-                r'\*\*VULNERABILITY ANALYSIS\*\*(.*?)(?=\*\*|$)',
-                r'\*\*SECURITY ANALYSIS\*\*(.*?)(?=\*\*|$)'
+            # Extract contextual analysis
+            contextual_patterns = [
+                r'\*\*CONTEXTUAL ANALYSIS\*\*(.*?)(?=\*\*|$)',
+                r'4\.\s*\*\*CONTEXTUAL ANALYSIS\*\*(.*?)(?=\d+\.\s*\*\*|$)'
             ]
+            contextual_analysis = ""
+            for pattern in contextual_patterns:
+                contextual_match = re.search(pattern, response, re.DOTALL | re.IGNORECASE)
+                if contextual_match:
+                    contextual_analysis = contextual_match.group(1).strip()
+                    break
             
-            vuln_text = ""
-            for section_pattern in vuln_sections:
-                section_match = re.search(section_pattern, response, re.DOTALL | re.IGNORECASE)
-                if section_match:
-                    vuln_text += " " + section_match.group(1).lower()
-            
-            # Enhanced vulnerability patterns
-            vuln_patterns = {
-                'buffer_overflow': ['buffer overflow', 'buffer overrun', 'stack overflow', 'heap overflow', 'strcpy', 'strcat', 'sprintf', 'gets', 'bounds check', 'array bounds'],
-                'format_string': ['format string', 'printf', '%s', '%d', '%x', 'format specifier', 'fprintf', 'snprintf'],
-                'integer_overflow': ['integer overflow', 'integer wraparound', 'arithmetic overflow', 'signed overflow', 'multiplication overflow', 'size calculation'],
-                'use_after_free': ['use after free', 'dangling pointer', 'freed memory', 'double free'],
-                'double_free': ['double free', 'double deallocation', 'free twice'],
-                'null_pointer': ['null pointer', 'null dereference', 'nullptr', 'null check'],
-                'memory_leak': ['memory leak', 'malloc', 'calloc', 'resource leak', 'allocation'],
-                'race_condition': ['race condition', 'toctou', 'time-of-check', 'concurrency', 'thread safety'],
-                'command_injection': ['command injection', 'code injection', 'script injection', 'system call', 'exec', 'shell command'],
-                'path_traversal': ['path traversal', 'directory traversal', '../', 'file inclusion', 'path injection'],
-                'privilege_escalation': ['privilege escalation', 'privilege elevation', 'setuid', 'permission bypass'],
-                'denial_of_service': ['denial of service', 'dos', 'resource exhaustion', 'infinite loop', 'crash'],
-                'information_disclosure': ['information disclosure', 'data leak', 'memory disclosure', 'uninitialized', 'sensitive data'],
-                'crypto_weakness': ['cryptographic', 'encryption', 'hash', 'md5', 'sha1', 'weak algorithm', 'crypto'],
-                'input_validation': ['input validation', 'sanitization', 'bounds check', 'parameter validation', 'user input']
-            }
-            
-            for vuln_type, keywords in vuln_patterns.items():
-                if any(keyword in vuln_text for keyword in keywords):
-                    vulnerabilities.append(vuln_type)
-            
-            return explanation, risk_score, vulnerabilities
+            return explanation, risk_score, vulnerabilities, contextual_analysis
             
         except Exception as e:
             logger.error(f"Error parsing AI response: {e}")
+            # Fallback to basic parsing
+            return response[:500] if response else "No analysis available", 0, [], ""
             # Return first 1000 characters as fallback for longer technical responses
-            return response[:1000], 0, []
+            return response[:1000], 0, [], ""
     
     def analyze_vulnerability_patterns(self, code: str) -> Dict[str, Any]:
         """
@@ -941,6 +916,146 @@ Be technically precise and include specific function names, addresses, and code 
                 "error": f"AI security analysis failed: {str(e)}"
             }
     
+    def analyze_security_strings(self, security_strings: List[Dict], binary_name: str) -> Dict[str, Any]:
+        """
+        Perform AI-powered security analysis on binary strings
+        
+        Args:
+            security_strings: List of security-relevant strings with their metadata
+            binary_name: Name of the binary being analyzed
+            
+        Returns:
+            Dictionary with string security analysis results
+        """
+        if not self.client:
+            return {
+                "success": False,
+                "error": "OpenAI client not initialized. Check API key configuration."
+            }
+        
+        try:
+            # Prepare strings for AI analysis (limit to top 20)
+            strings_text = '\n'.join([f"- {s['value']} (Category: {s['category']})" for s in security_strings[:20]])
+            
+            prompt = f"""
+Analyze these security-relevant strings found in the binary '{binary_name}' for potential security issues:
+
+{strings_text}
+
+For each string that represents a genuine security concern, provide:
+1. **Title**: Brief security issue description
+2. **Severity**: CRITICAL, HIGH, MEDIUM, LOW, or INFO  
+3. **Description**: Detailed explanation of the security implication
+4. **CWE ID**: Relevant Common Weakness Enumeration ID
+5. **Confidence**: Your confidence level (0-100)
+6. **Affected String**: The specific string that caused concern
+7. **Remediation**: Specific mitigation recommendations
+
+Focus on:
+- Hardcoded credentials, passwords, or API keys
+- Weak cryptographic algorithms or configurations
+- Command injection vectors and shell execution patterns
+- SQL injection patterns and database queries
+- Path traversal risks and file system access
+- Information disclosure and debug information
+- Network endpoints and sensitive URLs
+- Registry keys or system configuration strings
+
+Respond in JSON format:
+{{
+  "findings": [
+    {{
+      "title": "Hardcoded Credential Found",
+      "severity": "HIGH", 
+      "description": "The binary contains what appears to be a hardcoded password or API key, which could allow unauthorized access if discovered.",
+      "cwe_id": "CWE-798",
+      "confidence": 85,
+      "affected_string": "password=admin123",
+      "remediation": "Remove hardcoded credentials and implement secure credential storage using environment variables or secure key management systems."
+    }}
+  ]
+}}
+"""
+            
+            logger.info(f"Performing AI string security analysis for binary {binary_name} with {len(security_strings)} strings")
+            
+            # Call AI API
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a cybersecurity expert specializing in static binary analysis and string-based vulnerability detection. Analyze strings for genuine security concerns and respond in the exact JSON format requested. Be precise and focus only on real security issues."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                max_tokens=2000,
+                temperature=0.1,  # Low temperature for consistent analysis
+                timeout=45
+            )
+            
+            ai_response = response.choices[0].message.content
+            
+            # Parse JSON response
+            try:
+                # Extract JSON from response
+                json_match = re.search(r'\{.*\}', ai_response, re.DOTALL)
+                if json_match:
+                    json_str = json_match.group(0)
+                    parsed_response = json.loads(json_str)
+                    
+                    # Validate and format findings
+                    if 'findings' in parsed_response and isinstance(parsed_response['findings'], list):
+                        formatted_findings = []
+                        for finding in parsed_response['findings']:
+                            if isinstance(finding, dict) and 'title' in finding:
+                                # Ensure all required fields are present
+                                formatted_finding = {
+                                    'title': finding.get('title', 'Security String Analysis'),
+                                    'severity': finding.get('severity', 'INFO').upper(),
+                                    'description': finding.get('description', 'Security-relevant string detected'),
+                                    'cwe_id': finding.get('cwe_id'),
+                                    'confidence': int(finding.get('confidence', 70)),
+                                    'affected_string': finding.get('affected_string', ''),
+                                    'remediation': finding.get('remediation', 'Review string usage for security implications'),
+                                    'category': 'string_analysis',
+                                    'detection_methods': ['ai_string_analysis'],
+                                    'risk_score': min(100, max(0, int(finding.get('confidence', 70))))
+                                }
+                                formatted_findings.append(formatted_finding)
+                        
+                        return {
+                            "success": True,
+                            "findings": formatted_findings,
+                            "raw_response": ai_response
+                        }
+                
+                # If no valid findings structure, return empty
+                logger.warning(f"AI string analysis for {binary_name} returned invalid structure")
+                return {
+                    "success": True,
+                    "findings": [],
+                    "raw_response": ai_response
+                }
+                
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON parsing error in string analysis for {binary_name}: {e}")
+                return {
+                    "success": False,
+                    "error": f"Invalid JSON response from AI: {str(e)}",
+                    "raw_response": ai_response
+                }
+                
+        except Exception as e:
+            logger.error(f"Error in AI string security analysis for {binary_name}: {e}")
+            return {
+                "success": False,
+                "error": f"AI string analysis failed: {str(e)}"
+            }
+
     def _parse_security_response_fallback(self, response: str, function_name: str) -> Dict[str, Any]:
         """
         Fallback parser for security analysis when JSON parsing fails

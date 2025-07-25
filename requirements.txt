@@ -43,4 +43,8 @@ requests==2.31.0
 jsonschema==4.20.0
 pathlib==1.0.1
 uuid==1.30
-openai>=1.0.0 
+
+# AI Services
+openai>=1.0.0
+anthropic>=0.7.0
+google-generativeai>=0.3.0 

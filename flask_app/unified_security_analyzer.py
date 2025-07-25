@@ -98,32 +98,26 @@ class UnifiedSecurityAnalyzer:
             logger.info(f"Starting unified security analysis for function {function.address} ({function.name or 'unnamed'})")
             
             # Step 1: AI-powered security analysis
-            logger.debug(f"Step 1: Starting AI security analysis for {function.address}")
             ai_analysis = self._perform_ai_security_analysis(function)
             logger.info(f"AI analysis result for {function.address}: success={ai_analysis.get('success')}")
             
             # Step 2: Pattern-based vulnerability detection
-            logger.debug(f"Step 2: Starting pattern analysis for {function.address}")
             pattern_analysis = self._perform_pattern_analysis(function)
             logger.info(f"Pattern analysis result for {function.address}: success={pattern_analysis.get('success')}")
             
             # Step 3: Correlate and validate results
-            logger.debug(f"Step 3: Correlating findings for {function.address}")
             unified_findings = self.risk_correlator.correlate_findings(
                 function, ai_analysis, pattern_analysis
             )
             logger.info(f"Correlation resulted in {len(unified_findings)} findings for {function.address}")
             
             # Step 4: Calculate confidence scores
-            logger.debug(f"Step 4: Calculating confidence scores for {function.address}")
-            for i, finding in enumerate(unified_findings):
+            for finding in unified_findings:
                 finding['confidence'] = self.confidence_calculator.calculate_confidence(
                     finding, ai_analysis, pattern_analysis
                 )
-                logger.debug(f"Finding {i+1} confidence: {finding['confidence']}%")
             
             # Step 5: Filter by confidence threshold
-            logger.debug(f"Step 5: Filtering by confidence threshold {self.confidence_threshold}%")
             high_confidence_findings = [
                 f for f in unified_findings 
                 if f['confidence'] >= self.confidence_threshold
@@ -131,7 +125,6 @@ class UnifiedSecurityAnalyzer:
             logger.info(f"Filtered {len(unified_findings)} findings to {len(high_confidence_findings)} high-confidence findings for {function.address}")
             
             # Step 6: Store findings in database
-            logger.debug(f"Step 6: Storing findings in database for {function.address}")
             stored_findings = self._store_unified_findings(function, high_confidence_findings)
             logger.info(f"Stored {len(stored_findings)} findings for {function.address}")
             
@@ -548,10 +541,12 @@ Respond in JSON format:
         return 'other'
     
     def _store_unified_findings(self, function: Function, findings: List[Dict]) -> List[Dict]:
-        """Store unified security findings in database"""
+        """Store unified security findings in database, replacing previous findings for this function"""
         stored_findings = []
-        
         try:
+            # Delete previous findings for this function
+            UnifiedSecurityFinding.query.filter_by(function_id=function.id).delete()
+            db.session.commit()
             for finding_data in findings:
                 # Create unified security finding
                 finding = UnifiedSecurityFinding(
@@ -638,7 +633,19 @@ class RiskCorrelationEngine:
                 'correlation_score': len(matching_patterns) * 20,  # Higher if patterns match
                 'evidence': self._build_evidence(ai_issue, matching_patterns)
             }
-            
+
+            # --- NEW LOGIC: Cap risk score for simple getters unless justified ---
+            if (
+                unified_finding['risk_score'] > 40 and
+                self._is_simple_getter(function, ai_issue, matching_patterns)
+            ):
+                if not self._ai_justifies_high_risk(ai_issue):
+                    unified_finding['risk_score'] = 40
+                    unified_finding['notes'] = (
+                        "Risk score capped due to simple getter pattern and lack of strong justification for high risk."
+                    )
+            # ---------------------------------------------------------------
+
             unified_findings.append(unified_finding)
         
         # Add pattern-only findings (not matched by AI)
@@ -670,6 +677,33 @@ class RiskCorrelationEngine:
                 unified_findings.append(unified_finding)
         
         return unified_findings
+
+    def _is_simple_getter(self, function, ai_issue, matching_patterns):
+        """Detect if a function is a simple getter (no params, just returns a static value, no dangerous patterns)"""
+        # No dangerous patterns found
+        if matching_patterns:
+            return False
+        # No parameters and code is a single return statement
+        code = function.decompiled_code.strip()
+        if hasattr(function, 'parameter_count') and function.parameter_count in (None, 0):
+            # Check for a single return statement (allow whitespace and comments)
+            code_lines = [line.strip() for line in code.splitlines() if line.strip() and not line.strip().startswith('//')]
+            if len(code_lines) == 2 and code_lines[0].startswith('return') and code_lines[0].endswith(';'):
+                return True
+            if re.match(r"^return [^;]+;\s*$", code, re.MULTILINE):
+                return True
+        # AI summary/description mentions 'returns value at address', 'getter', 'static value', etc.
+        desc = (ai_issue.get('description') or '').lower()
+        if any(kw in desc for kw in ['returns value at address', 'getter', 'static value', 'returns a value from', 'returns the value at']):
+            return True
+        return False
+
+    def _ai_justifies_high_risk(self, ai_issue):
+        desc = (ai_issue.get('description') or '').lower()
+        for keyword in ['cryptographic key', 'password', 'private key', 'secret', 'authentication token', 'credential']:
+            if keyword in desc:
+                return True
+        return False
     
     def _find_matching_patterns(self, ai_issue: Dict, pattern_vulns: List[Dict]) -> List[Dict]:
         """Find vulnerability patterns that match an AI-identified issue"""

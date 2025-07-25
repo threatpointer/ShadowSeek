@@ -101,10 +101,10 @@ class GhidraBridgeManager:
                             logger.info(f"Successfully connected to existing Ghidra Bridge: {result}")
                             return True
                     except Exception as e:
-                        logger.debug(f"Connection attempt {attempt + 1}/{max_attempts} failed: {e}")
                         if attempt < max_attempts - 1:
                             time.sleep(2)
                         else:
+                            logger.warning(f"Connection attempts failed after {max_attempts} tries: {e}")
                             logger.warning("Could not connect to existing bridge. Make sure start_ghidra_bridge_new.bat is running.")
                 
                 return False
@@ -192,7 +192,7 @@ class GhidraBridgeManager:
                     self.bridge = GhidraBridge(connect_to_host="localhost", connect_to_port=self.bridge_port)
                 except Exception as connect_error:
                     # If connection fails, don't log as error immediately (might be starting up)
-                    logger.debug(f"Bridge connection attempt failed: {connect_error}")
+                    logger.warning(f"Bridge connection attempt failed: {connect_error}")
                     self.cached_connection_status = False
                     self.last_connection_check = current_time
                     return False

@@ -99,6 +99,7 @@ import atomOneDark from 'react-syntax-highlighter/dist/styles/atom-one-dark';
 import TaskProgress from './TaskProgress';
 import UnifiedSecurityDashboard from './UnifiedSecurityDashboard';
 import FuzzingDashboard from './FuzzingDashboard';
+import type { OverridableStringUnion } from '@mui/types';
 
 
 interface TabPanelProps {
@@ -2161,6 +2162,142 @@ const BinaryDetails: React.FC = () => {
     }
   };
 
+  // Utility for risk score mapping
+  const getRiskLevelAndExplanation = (score: number) => {
+    if (score >= 81) return { level: 'Critical', color: 'error', explanation: 'Critical risk - remote code execution, privilege escalation, or system compromise.' };
+    if (score >= 61) return { level: 'High', color: 'warning', explanation: 'High risk - easily exploitable, significant impact potential.' };
+    if (score >= 41) return { level: 'Medium', color: 'info', explanation: 'Medium risk - exploitable vulnerabilities with moderate impact.' };
+    if (score >= 21) return { level: 'Low', color: 'success', explanation: 'Low risk - minor issues, hard to exploit, limited impact.' };
+    return { level: 'Info', color: 'info', explanation: 'Minimal risk - well-bounded, validated inputs, safe operations.' }; // Use 'info' instead of 'default'
+  };
+
+  const isDLL = binary.original_filename?.toLowerCase().endsWith('.dll');
+
+  // At the top of the component, after fetching security findings and functions:
+  const totalFindings = Array.isArray(securityFindings) ? securityFindings.length : (securitySummary?.total_findings || 0);
+  const aiHighRiskCount = functions.filter(f => typeof f.risk_score === 'number' && f.risk_score >= 60).length;
+
+  // Helper to render markdown-like lists and bolds as themed MUI components
+  const renderSectionContent = (content: string) => {
+    // Render numbered lists
+    if (/^\s*\d+\./m.test(content)) {
+      // Split into lines, group as list items
+      const items = content.split(/\n\s*(?=\d+\.)/).map(item => item.trim()).filter(Boolean);
+      return (
+        <Box component="ol" sx={{ pl: 3, mb: 1 }}>
+          {items.map((item, idx) => {
+            // Bolded sub-header (e.g., '1. Input Validation: ...')
+            const match = item.match(/^(\d+\.)\s*(\*\*([^*]+)\*\*:)?(.*)$/);
+            if (match) {
+              const [, num, , bold, rest] = match;
+              return (
+                <li key={idx} style={{ marginBottom: 8 }}>
+                  {bold ? (
+                    <Typography component="span" fontWeight="bold" color="warning.main">{bold}</Typography>
+                  ) : null}
+                  <Typography component="span" sx={{ ml: bold ? 1 : 0, color: 'text.primary' }}>{rest.trim()}</Typography>
+                </li>
+              );
+            }
+            return <li key={idx}><Typography component="span">{item}</Typography></li>;
+          })}
+        </Box>
+      );
+    }
+    // Render bulleted lists
+    if (/^\s*[-•]/m.test(content)) {
+      const items = content.split(/\n\s*[-•]\s*/).map(item => item.trim()).filter(Boolean);
+      return (
+        <Box component="ul" sx={{ pl: 3, mb: 1 }}>
+          {items.map((item, idx) => <li key={idx}><Typography component="span">{item}</Typography></li>)}
+        </Box>
+      );
+    }
+    // Render bolded sub-header at start
+    const boldHeader = content.match(/^(\*\*([^*]+)\*\*:)(.*)$/);
+    if (boldHeader) {
+      return (
+        <Typography>
+          <Typography component="span" fontWeight="bold" color="primary.main">{boldHeader[2]}:</Typography>
+          <Typography component="span" sx={{ ml: 1 }}>{boldHeader[3].trim()}</Typography>
+        </Typography>
+      );
+    }
+    // Otherwise, render as paragraph
+    return <Typography sx={{ mb: 1 }}>{content}</Typography>;
+  };
+
+  // Enhanced AI Security Analysis section parser and renderer
+  const parseAndRenderAISummary = (rawText: string) => {
+    const sectionRegex = /\*\*([\w\s]+)\*\*:?.*?([\s\S]*?)(?=\*\*[\w\s]+\*\*|$)/gi;
+    let sections: Array<{ title: string, content: string }> = [];
+    let match;
+    while ((match = sectionRegex.exec(rawText)) !== null) {
+      const title = match[1].replace(/_/g, ' ').trim();
+      const content = match[2].replace(/\*\*/g, '').trim();
+      sections.push({ title, content });
+    }
+    if (sections.length === 0 && rawText.trim()) {
+      // Try to split the text by section headers even if not matched by the main regex
+      const looseSectionRegex = /\*\*([\w\s]+)\*\*:?/gi;
+      let lastIndex = 0;
+      let looseMatch;
+      let looseSections: Array<{ title: string, content: string }> = [];
+      let lastTitle = null;
+      while ((looseMatch = looseSectionRegex.exec(rawText)) !== null) {
+        if (lastTitle !== null) {
+          const content = rawText.slice(lastIndex, looseMatch.index).replace(/\*\*/g, '').trim();
+          looseSections.push({ title: lastTitle, content });
+        }
+        lastTitle = looseMatch[1].replace(/_/g, ' ').trim();
+        lastIndex = looseMatch.index + looseMatch[0].length;
+      }
+      if (lastTitle !== null) {
+        const content = rawText.slice(lastIndex).replace(/\*\*/g, '').trim();
+        looseSections.push({ title: lastTitle, content });
+      }
+      if (looseSections.length > 0) {
+        sections = looseSections;
+      }
+    }
+    if (sections.length > 0) {
+      return (
+        <Box>
+          {sections.map(({ title, content }, idx) => (
+            <Box mb={2} key={title + idx}>
+              <Typography component="span" fontWeight="bold" sx={{ display: 'block', mb: 0.5 }}>{title.replace(/:$/, '')}</Typography>
+              {title.trim().toUpperCase() === 'RISK SCORE'
+                ? (
+                    <Typography variant="body2" sx={{ fontSize: '0.95rem', lineHeight: 1.6, color: 'text.primary', mb: 2 }}>
+                      {content.replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim()}
+                    </Typography>
+                  )
+                : renderSectionContent(content)
+              }
+            </Box>
+          ))}
+        </Box>
+      );
+    }
+    // Fallback: split by double newlines or periods, render each as a paragraph
+    if (rawText.trim()) {
+      let paras = rawText.split(/\n\s*\n/).filter(p => p.trim());
+      if (paras.length <= 1) {
+        paras = rawText.split(/(?<=\.)\s+/).filter(p => p.trim());
+      }
+      return (
+        <Box>
+          {paras.map((p, idx) => (
+            <Typography key={idx} variant="body2" sx={{ fontSize: '0.95rem', lineHeight: 1.6, color: 'text.primary', mb: 2 }}>
+              {p.trim()}
+            </Typography>
+          ))}
+        </Box>
+      );
+    }
+    return null;
+  };
+
   return (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
@@ -2397,8 +2534,8 @@ const BinaryDetails: React.FC = () => {
                 </Typography>
               </Box>
               
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6} md={2.4}>
+              <Grid container spacing={3} sx={{ mb: 3 }}>
+                <Grid item xs={12} md={2.4}>
                   <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
                     <Typography variant="h5" color="primary" fontWeight="bold">
                       {functions.length}
@@ -2408,7 +2545,7 @@ const BinaryDetails: React.FC = () => {
                     </Typography>
                   </Card>
                 </Grid>
-                <Grid item xs={12} sm={6} md={2.4}>
+                <Grid item xs={12} md={2.4}>
                   <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
                     <Typography variant="h5" color="success.main" fontWeight="bold">
                       {functions.filter(f => f.is_decompiled).length}
@@ -2418,7 +2555,7 @@ const BinaryDetails: React.FC = () => {
                     </Typography>
                   </Card>
                 </Grid>
-                <Grid item xs={12} sm={6} md={2.4}>
+                <Grid item xs={12} md={2.4}>
                   <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
                     <Typography variant="h5" color="secondary.main" fontWeight="bold">
                       {functions.filter(f => f.ai_analyzed || f.ai_summary || f.risk_score).length}
@@ -2428,23 +2565,23 @@ const BinaryDetails: React.FC = () => {
                     </Typography>
                   </Card>
                 </Grid>
-                <Grid item xs={12} sm={6} md={2.4}>
+                <Grid item xs={12} md={2.4}>
                   <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
                     <Typography variant="h5" color="error.main" fontWeight="bold">
-                      {functions.filter(f => f.risk_score && f.risk_score >= 70).length}
+                      {aiHighRiskCount}
                     </Typography>
                     <Typography variant="body2" color="textSecondary">
-                      High Risk
+                      AI Risk: High
                     </Typography>
                   </Card>
                 </Grid>
-                <Grid item xs={12} sm={6} md={2.4}>
+                <Grid item xs={12} md={2.4}>
                   <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
                     <Typography variant="h5" color="warning.main" fontWeight="bold">
-                      {vulnerabilitiesCount}
+                      {totalFindings}
                     </Typography>
                     <Typography variant="body2" color="textSecondary">
-                      Vulnerabilities
+                      Total Vulnerabilities
                     </Typography>
                   </Card>
                 </Grid>
@@ -2456,66 +2593,13 @@ const BinaryDetails: React.FC = () => {
           <Card sx={{ mt: 3 }}>
             <Tabs value={tabValue} onChange={(e, newValue) => setTabValue(newValue)}>
               <Tab label="Functions" />
-              <Tab 
-                label={
-                  <Box display="flex" alignItems="center" gap={2}>
-                    DLL Analysis
-                    <Code />
-                  </Box>
-                } 
-              />
-              <Tab 
-                label={
-                  <Box display="flex" alignItems="center" gap={2}>
-                    Strings
-                    <Storage />
-                  </Box>
-                } 
-                onClick={() => stringsData.length === 0 && fetchComprehensiveData('strings')}
-              />
-              <Tab 
-                label={
-                  <Box display="flex" alignItems="center" gap={2}>
-                    Symbols
-                    <AccountTree />
-                  </Box>
-                } 
-                onClick={() => symbolsData.length === 0 && fetchComprehensiveData('symbols')}
-              />
-              <Tab 
-                label={
-                  <Box display="flex" alignItems="center" gap={2}>
-                    Memory
-                    <Memory />
-                  </Box>
-                } 
-                onClick={() => memoryBlocksData.length === 0 && fetchComprehensiveData('memory_blocks')}
-              />
-              <Tab 
-                label={
-                  <Box display="flex" alignItems="center" gap={2}>
-                    Imports/Exports
-                    <ImportExport />
-                  </Box>
-                } 
-                onClick={() => (importsData.length === 0 || exportsData.length === 0) && Promise.all([fetchComprehensiveData('imports'), fetchComprehensiveData('exports')])}
-              />
-              <Tab 
-                label={
-                  <Box display="flex" alignItems="center" gap={2}>
-                    Security Analysis
-                    <Security />
-                  </Box>
-                } 
-              />
-              <Tab 
-                label={
-                  <Box display="flex" alignItems="center" gap={2}>
-                    Fuzzing
-                    <Speed />
-                  </Box>
-                } 
-              />
+              {isDLL && <Tab label="DLL Analysis" />}
+              <Tab label={<Box display="flex" alignItems="center" gap={2}>Strings<Storage /></Box>} />
+              <Tab label={<Box display="flex" alignItems="center" gap={2}>Symbols<AccountTree /></Box>} />
+              <Tab label={<Box display="flex" alignItems="center" gap={2}>Memory<Memory /></Box>} />
+              <Tab label={<Box display="flex" alignItems="center" gap={2}>Imports/Exports<ImportExport /></Box>} />
+              <Tab label={<Box display="flex" alignItems="center" gap={2}>Security Analysis<Security /></Box>} />
+              <Tab label={<Box display="flex" alignItems="center" gap={2}>Fuzzing<Speed /></Box>} />
             </Tabs>
 
             <TabPanel value={tabValue} index={0}>
@@ -2885,183 +2969,117 @@ const BinaryDetails: React.FC = () => {
                           <TableRow>
                             <TableCell colSpan={8} sx={{ p: 0 }}>
                               <Collapse in={expandedFunctions[func.id]} timeout="auto" unmountOnExit>
-                                <Box sx={{ p: 3, bgcolor: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                                  {functionData[func.id]?.loading?.fetchingDetails ? (
-                                    <Box display="flex" justifyContent="center" alignItems="center" py={4}>
-                                      <CircularProgress size={24} />
-                                      <Typography variant="body2" color="textSecondary" sx={{ ml: 2 }}>
-                                        Loading function details...
-                                      </Typography>
-                                    </Box>
-                                  ) : (
-                                    <Grid container spacing={3}>
-                                      {/* Function Actions */}
-                                      <Grid item xs={12}>
-                                        <Box display="flex" gap={2} mb={2}>
-                                          <Button
-                                            variant={functionData[func.id]?.decompiled ? "outlined" : "contained"}
-                                            size="small"
-                                            startIcon={
-                                              functionData[func.id]?.loading?.decompiling ? 
-                                              <CircularProgress size={16} /> : <Code />
-                                            }
-                                            onClick={() => handleDecompileFunction(func.id)}
-                                            disabled={functionData[func.id]?.loading?.decompiling}
-                                            color={functionData[func.id]?.decompiled ? "success" : "primary"}
-                                          >
-                                            {functionData[func.id]?.loading?.decompiling ? 'Decompiling...' : 
-                                             functionData[func.id]?.decompiled ? 'Decompiled ✓' : 'Decompile'}
-                                          </Button>
-                                          
-                                          <Button
-                                            variant={functionData[func.id]?.aiExplanation ? "outlined" : "contained"}
-                                            size="small"
-                                            startIcon={
-                                              functionData[func.id]?.loading?.explaining ? 
-                                              <CircularProgress size={16} /> : <Psychology />
-                                            }
-                                            onClick={() => handleExplainFunction(func.id)}
-                                            disabled={
-                                              functionData[func.id]?.loading?.explaining || 
-                                              !functionData[func.id]?.decompiled
-                                            }
-                                            color={functionData[func.id]?.aiExplanation ? "success" : "secondary"}
-                                          >
-                                            {functionData[func.id]?.loading?.explaining ? 'Analyzing...' : 
-                                             functionData[func.id]?.aiExplanation ? 'Explained ✓' : 'AI Explain'}
-                                          </Button>
-                                          
-                                          
-                                        </Box>
-                                      </Grid>
-
-                                      {/* Left Column: Function Information + AI Analysis */}
-                                      <Grid item xs={12} md={6}>
-                                        {/* Function Information */}
-                                        <Card variant="outlined" sx={{ bgcolor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                                          <CardContent>
-                                            <Typography variant="h6" gutterBottom>
-                                              Function Info
-                                            </Typography>
-                                            <Table size="small">
-                                              <TableBody>
-                                                <TableRow>
-                                                  <TableCell><strong>Name</strong></TableCell>
-                                                  <TableCell>{func.name || 'Unknown'}</TableCell>
-                                                </TableRow>
-                                                <TableRow>
-                                                  <TableCell><strong>Address</strong></TableCell>
-                                                  <TableCell sx={{ fontFamily: 'monospace' }}>{func.address}</TableCell>
-                                                </TableRow>
-                                                <TableRow>
-                                                  <TableCell><strong>Size</strong></TableCell>
-                                                  <TableCell>{func.size ? `${func.size} bytes` : 'Unknown'}</TableCell>
-                                                </TableRow>
-                                                <TableRow>
-                                                  <TableCell><strong>Convention</strong></TableCell>
-                                                  <TableCell>{func.calling_convention || 'Unknown'}</TableCell>
-                                                </TableRow>
-                                              </TableBody>
-                                            </Table>
-                                          </CardContent>
-                                        </Card>
-
-                                        {/* AI Analysis below Function Info */}
-                                        {functionData[func.id]?.aiExplanation && (
-                                          <Box sx={{ mt: 2 }}>
-                                            <Card variant="outlined" sx={{ bgcolor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                                              <CardContent>
-                                                <Box display="flex" justifyContent="between" alignItems="center" mb={2}>
-                                                  <Typography variant="h6">AI Security Analysis</Typography>
-                                                  {functionData[func.id]?.aiExplanation?.cached && (
-                                                    <Chip label="Cached" size="small" color="info" />
-                                                  )}
-                                                </Box>
-                                                
-                                                {/* Risk Score */}
-                                                {functionData[func.id]?.aiExplanation?.risk_score !== undefined && (
-                                                  <Box mb={2}>
-                                                    <Box display="flex" alignItems="center" gap={1} mb={1}>
-                                                      <Security color={getRiskColor(functionData[func.id]?.aiExplanation?.risk_score)} />
-                                                      <Typography variant="subtitle2" fontSize="0.9rem">
-                                                        Risk Score: {functionData[func.id]?.aiExplanation?.risk_score}/100
-                                                      </Typography>
-                                                      <Chip
-                                                        label={getRiskLevel(functionData[func.id]?.aiExplanation?.risk_score)}
-                                                        color={getRiskColor(functionData[func.id]?.aiExplanation?.risk_score)}
-                                                        size="small"
-                                                      />
-                                                    </Box>
-                                                    <LinearProgress
-                                                      variant="determinate"
-                                                      value={functionData[func.id]?.aiExplanation?.risk_score}
-                                                      color={getRiskColor(functionData[func.id]?.aiExplanation?.risk_score) as any}
-                                                      sx={{ height: 6, borderRadius: 3 }}
-                                                    />
-                                                  </Box>
-                                                )}
-                                                
-                                                {/* AI Summary */}
-                                                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontSize: '0.85rem', lineHeight: 1.4 }}>
-                                                  {(() => {
-                                                    const aiData = functionData[func.id]?.aiExplanation;
-                                                    if (typeof aiData?.ai_summary === 'string') {
-                                                      return aiData.ai_summary;
-                                                    } else if (typeof aiData === 'string') {
-                                                      return aiData;
-                                                    } else {
-                                                      return 'No AI analysis available';
-                                                    }
-                                                  })()}
-                                                </Typography>
-                                              </CardContent>
-                                            </Card>
+                                <Box sx={{ p: 3, bgcolor: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', gap: 3, alignItems: 'stretch', minHeight: 0 }}>
+                                  {/* Left Column: Function Info + AI Security Analysis */}
+                                  <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+                                    <Card variant="outlined" sx={{ bgcolor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', mb: 2, flex: '0 0 auto' }}>
+                                      <CardContent>
+                                        <Typography variant="h6" gutterBottom>Function Info</Typography>
+                                        <Table size="small">
+                                          <TableBody>
+                                            <TableRow><TableCell><strong>Name</strong></TableCell><TableCell>{func.name || 'Unknown'}</TableCell></TableRow>
+                                            <TableRow><TableCell><strong>Address</strong></TableCell><TableCell sx={{ fontFamily: 'monospace' }}>{func.address}</TableCell></TableRow>
+                                            <TableRow><TableCell><strong>Size</strong></TableCell><TableCell>{func.size ? `${func.size} bytes` : 'Unknown'}</TableCell></TableRow>
+                                            <TableRow><TableCell><strong>Convention</strong></TableCell><TableCell>{func.calling_convention || 'Unknown'}</TableCell></TableRow>
+                                          </TableBody>
+                                        </Table>
+                                      </CardContent>
+                                    </Card>
+                                    {functionData[func.id]?.aiExplanation && (
+                                      <Card variant="outlined" sx={{ bgcolor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                                        <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                                          <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
+                                            <Typography variant="h6">AI Security Analysis</Typography>
+                                            {functionData[func.id]?.aiExplanation?.cached && (
+                                              <Chip label="Cached" size="small" color="info" sx={{ ml: 1 }} />
+                                            )}
                                           </Box>
-                                        )}
-                                      </Grid>
-
-                                      {/* Decompiled Code */}
-                                      {functionData[func.id]?.decompiled && (
-                                        <Grid item xs={12} md={6}>
-                                          <Card variant="outlined" sx={{ bgcolor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                                            <CardContent>
-                                              <Box display="flex" justifyContent="between" alignItems="center" mb={2}>
-                                                <Typography variant="h6">Decompiled Code</Typography>
-                                                {functionData[func.id]?.decompiled?.cached && (
-                                                  <Chip label="Cached" size="small" color="info" />
-                                                )}
+                                          {/* Risk Score */}
+                                          {functionData[func.id]?.aiExplanation?.risk_score !== undefined && (() => {
+                                            const { level, color, explanation } = getRiskLevelAndExplanation(functionData[func.id]?.aiExplanation?.risk_score);
+                                            return (
+                                              <Box mb={3}>
+                                                <Box display="flex" alignItems="center" gap={1} mb={1}>
+                                                  <Security color={color as OverridableStringUnion<'error' | 'success' | 'info' | 'warning' | 'primary' | 'secondary', {}>} />
+                                                  <Typography variant="subtitle2" fontSize="0.95rem">
+                                                    Risk Score: {functionData[func.id]?.aiExplanation?.risk_score}/100
+                                                  </Typography>
+                                                  <Chip label={level} color={color as OverridableStringUnion<'default' | 'error' | 'success' | 'info' | 'warning' | 'primary' | 'secondary', {}>} size="small" />
+                                                </Box>
+                                                <LinearProgress
+                                                  variant="determinate"
+                                                  value={functionData[func.id]?.aiExplanation?.risk_score}
+                                                  color={color as OverridableStringUnion<'error' | 'success' | 'info' | 'warning' | 'primary' | 'secondary', {}>}
+                                                  sx={{ height: 8, borderRadius: 4, mb: 1 }}
+                                                />
+                                                <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
+                                                  {explanation}
+                                                </Typography>
+                                                <Divider sx={{ my: 2 }} />
                                               </Box>
-                                              <Paper sx={{ p: 0, maxHeight: '400px', overflow: 'auto', bgcolor: '#181818', border: '1px solid rgba(255,255,255,0.1)' }}>
-                                                <SyntaxHighlighter
-                                                  language="c"
-                                                  style={atomOneDark}
-                                                  showLineNumbers
-                                                  customStyle={{
-                                                    margin: 0,
-                                                    borderRadius: 0,
-                                                    fontSize: '12px',
-                                                    backgroundColor: '#181818'
-                                                  }}
-                                                >
-                                                  {(() => {
-                                                    // Safely extract decompiled code string
-                                                    const decompiledData = functionData[func.id]?.decompiled;
-                                                    if (decompiledData?.decompiled_code && typeof decompiledData.decompiled_code === 'string') {
-                                                      return decompiledData.decompiled_code;
-                                                    } else if (typeof decompiledData === 'string') {
-                                                      return decompiledData;
-                                                    } else {
-                                                      return '// No code available';
-                                                    }
-                                                  })()}
-                                                </SyntaxHighlighter>
-                                              </Paper>
-                                            </CardContent>
-                                          </Card>
-                                        </Grid>
-                                      )}
-                                    </Grid>
-                                  )}
+                                            );
+                                          })()}
+                                          {/* AI Analysis Content */}
+                                          <Box sx={{ flex: 1, minHeight: 0 }}>
+                                            {(() => {
+                                              const aiData = functionData[func.id]?.aiExplanation;
+                                              let rawText = '';
+                                              if (typeof aiData?.ai_summary === 'string') {
+                                                rawText = aiData.ai_summary;
+                                              } else if (typeof aiData === 'string') {
+                                                rawText = aiData;
+                                              } else {
+                                                return <Typography variant="body2" color="textSecondary">No AI analysis available</Typography>;
+                                              }
+                                              return parseAndRenderAISummary(rawText);
+                                            })()}
+                                          </Box>
+                                        </CardContent>
+                                      </Card>
+                                    )}
+                                  </Box>
+                                  {/* Right Column: Decompiled Code */}
+                                  <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+                                    {functionData[func.id]?.decompiled && (
+                                      <Card variant="outlined" sx={{ bgcolor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                                        <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                                          <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                                            <Typography variant="h6">Decompiled Code</Typography>
+                                            {functionData[func.id]?.decompiled?.cached && (
+                                              <Chip label="Cached" size="small" color="info" />
+                                            )}
+                                          </Box>
+                                          <Paper sx={{ p: 0, flex: 1, overflow: 'auto', bgcolor: '#181818', border: '1px solid rgba(255,255,255,0.1)', minHeight: 0, maxHeight: '100%' }}>
+                                            <SyntaxHighlighter
+                                              language="c"
+                                              style={atomOneDark}
+                                              showLineNumbers
+                                              customStyle={{
+                                                margin: 0,
+                                                borderRadius: 0,
+                                                fontSize: '12px',
+                                                backgroundColor: '#181818',
+                                                height: '100%',
+                                                minHeight: 0
+                                              }}
+                                            >
+                                              {(() => {
+                                                // Safely extract decompiled code string
+                                                const decompiledData = functionData[func.id]?.decompiled;
+                                                if (decompiledData?.decompiled_code && typeof decompiledData.decompiled_code === 'string') {
+                                                  return decompiledData.decompiled_code;
+                                                } else if (typeof decompiledData === 'string') {
+                                                  return decompiledData;
+                                                } else {
+                                                  return '// No code available';
+                                                }
+                                              })()}
+                                            </SyntaxHighlighter>
+                                          </Paper>
+                                        </CardContent>
+                                      </Card>
+                                    )}
+                                  </Box>
                                 </Box>
                               </Collapse>
                             </TableCell>
@@ -3086,8 +3104,7 @@ const BinaryDetails: React.FC = () => {
               )}
             </TabPanel>
 
-            {/* Combined DLL Analysis Tab */}
-            <TabPanel value={tabValue} index={1}>
+            {isDLL && <TabPanel value={tabValue} index={1}>
               <Box>
                 <Typography variant="h6" mb={2}>
                   DLL Analysis & Export Information
@@ -3419,90 +3436,19 @@ const BinaryDetails: React.FC = () => {
                                                   <CircularProgress size={24} />
                                                 </Box>
                                               ) : (
-                                                <Grid container spacing={2}>
-                                                  {/* Function Signature */}
-                                                  <Grid item xs={12}>
-                                                    <Typography variant="subtitle2" fontWeight="bold">
-                                                      Function Signature:
-                                                    </Typography>
-                                                    <Typography variant="body2" fontFamily="monospace" sx={{ 
-                                                      backgroundColor: 'rgba(255, 255, 255, 0.05)', 
-                                                      p: 1, 
-                                                      borderRadius: 1 
-                                                    }}>
-                                                      {(() => {
-                                                        // Extract the signature string safely
-                                                        const decompiledData = functionData[func.id]?.decompiled;
-                                                        if (typeof decompiledData === 'object' && decompiledData?.signature) {
-                                                          return decompiledData.signature;
-                                                        } else if (typeof decompiledData === 'string') {
-                                                          // If it's just a string, show the function name
-                                                          return func.name || 'Unknown function';
-                                                        } else {
-                                                          return func.name || 'Not available';
-                                                        }
-                                                      })()}
-                                                    </Typography>
+                                                <Grid container spacing={2} sx={{ display: 'flex', alignItems: 'stretch' }}>
+                                                  {/* AI Security Analysis */}
+                                                  <Grid item xs={12} md={6} sx={{ display: 'flex', flexDirection: 'column' }}>
+                                                    <Card variant="outlined" sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                                                      {/* ...AI Security Analysis content... */}
+                                                    </Card>
                                                   </Grid>
-
                                                   {/* Decompiled Code */}
-                                                  {func.is_decompiled && functionData[func.id]?.decompiled && (
-                                                    <Grid item xs={12}>
-                                                      <Typography variant="subtitle2" fontWeight="bold">
-                                                        Decompiled Code:
-                                                      </Typography>
-                                                      <SyntaxHighlighter 
-                                                        language="c" 
-                                                        style={atomOneDark}
-                                                        customStyle={{
-                                                          margin: 0,
-                                                          fontSize: '0.8rem',
-                                                          maxHeight: '300px',
-                                                          overflow: 'auto'
-                                                        }}
-                                                      >
-                                                        {(() => {
-                                                          // Extract the actual string from the decompiled data
-                                                          const decompiledData = functionData[func.id]?.decompiled;
-                                                          if (typeof decompiledData === 'string') {
-                                                            return decompiledData;
-                                                          } else if (decompiledData?.decompiled_code) {
-                                                            return decompiledData.decompiled_code;
-                                                          } else if (func.decompiled_code) {
-                                                            return func.decompiled_code;
-                                                          } else {
-                                                            return 'No code available';
-                                                          }
-                                                        })()}
-                                                      </SyntaxHighlighter>
-                                                    </Grid>
-                                                  )}
-                                                  
-                                                  {/* AI Analysis */}
-                                                  {functionData[func.id]?.aiExplanation && (
-                                                    <Grid item xs={12}>
-                                                      <Typography variant="subtitle2" fontWeight="bold" color="primary">
-                                                        AI Analysis:
-                                                      </Typography>
-                                                      <Paper variant="outlined" sx={{ p: 2, bgcolor: 'blue.50' }}>
-                                                        <Typography variant="body2">
-                                                          {(() => {
-                                                            // Safely extract AI explanation string
-                                                            const aiData = functionData[func.id].aiExplanation;
-                                                            if (typeof aiData === 'string') {
-                                                              return aiData;
-                                                            } else if (aiData?.ai_summary) {
-                                                              return aiData.ai_summary;
-                                                            } else if (aiData?.explanation) {
-                                                              return aiData.explanation;
-                                                            } else {
-                                                              return 'AI analysis available but format not recognized';
-                                                            }
-                                                          })()}
-                                                        </Typography>
-                                                      </Paper>
-                                                    </Grid>
-                                                  )}
+                                                  <Grid item xs={12} md={6} sx={{ display: 'flex', flexDirection: 'column' }}>
+                                                    <Card variant="outlined" sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                                                      {/* ...Decompiled Code content... */}
+                                                    </Card>
+                                                  </Grid>
                                                 </Grid>
                                               )}
                                             </Box>
@@ -3533,10 +3479,10 @@ const BinaryDetails: React.FC = () => {
                   );
                 })()}
               </Box>
-            </TabPanel>
+            </TabPanel>}
 
             {/* Strings Tab */}
-            <TabPanel value={tabValue} index={2}>
+            <TabPanel value={tabValue} index={isDLL ? 2 : 1}>
               <Box>
                 <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
                   <Typography variant="h6">
@@ -3595,7 +3541,7 @@ const BinaryDetails: React.FC = () => {
             </TabPanel>
 
             {/* Symbols Tab */}
-            <TabPanel value={tabValue} index={3}>
+            <TabPanel value={tabValue} index={isDLL ? 3 : 2}>
               <Box>
                 <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
                   <Typography variant="h6">
@@ -3656,7 +3602,7 @@ const BinaryDetails: React.FC = () => {
             </TabPanel>
 
             {/* Memory Blocks Tab */}
-            <TabPanel value={tabValue} index={4}>
+            <TabPanel value={tabValue} index={isDLL ? 4 : 3}>
               <Box>
                 <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
                   <Typography variant="h6">
@@ -3726,7 +3672,7 @@ const BinaryDetails: React.FC = () => {
             </TabPanel>
 
             {/* Imports/Exports Tab */}
-            <TabPanel value={tabValue} index={5}>
+            <TabPanel value={tabValue} index={isDLL ? 5 : 4}>
               <Box>
                 <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
                   <Typography variant="h6">
@@ -3826,7 +3772,7 @@ const BinaryDetails: React.FC = () => {
             </TabPanel>
 
             {/* Security Analysis Tab */}
-            <TabPanel value={tabValue} index={6}>
+            <TabPanel value={tabValue} index={isDLL ? 6 : 5}>
               <UnifiedSecurityDashboard
                 binary={binaryDetails?.binary}
                 functions={functions}
@@ -3858,7 +3804,7 @@ const BinaryDetails: React.FC = () => {
             </TabPanel>
 
             {/* Fuzzing Tab */}
-            <TabPanel value={tabValue} index={7}>
+            <TabPanel value={tabValue} index={isDLL ? 7 : 6}>
               <SimpleFuzzingInterface 
                 binaryId={binaryId!} 
                 functions={functions} 

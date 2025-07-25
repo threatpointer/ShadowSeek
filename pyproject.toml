@@ -51,6 +51,8 @@ dependencies = [
     "flask-restx==1.3.0",
     "setuptools>=80.9.0",
     "ghidra-bridge>=1.0.0",
+    "anthropic>=0.7.0",
+    "google-generativeai>=0.3.0",
 ]
 
 [project.optional-dependencies]

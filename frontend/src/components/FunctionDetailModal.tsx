@@ -40,6 +40,7 @@ import SyntaxHighlighter from 'react-syntax-highlighter';
 import tomorrow from 'react-syntax-highlighter/dist/styles/tomorrow';
 import { toast } from 'react-toastify';
 import { Function } from '../utils/api';
+import type { OverridableStringUnion } from '@mui/types';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -231,18 +232,13 @@ const FunctionDetailModal: React.FC<FunctionDetailModalProps> = ({
     setTimeout(() => clearInterval(interval), 300000);
   };
 
-  const getRiskColor = (score: number) => {
-    if (score >= 80) return 'error';
-    if (score >= 50) return 'warning';
-    if (score >= 20) return 'info';
-    return 'success';
-  };
-
-  const getRiskLevel = (score: number) => {
-    if (score >= 80) return 'Critical';
-    if (score >= 50) return 'High';
-    if (score >= 20) return 'Medium';
-    return 'Low';
+  // Utility for risk score mapping
+  const getRiskLevelAndExplanation = (score: number) => {
+    if (score >= 81) return { level: 'Critical', color: 'error', explanation: 'Critical risk - remote code execution, privilege escalation, or system compromise.' };
+    if (score >= 61) return { level: 'High', color: 'warning', explanation: 'High risk - easily exploitable, significant impact potential.' };
+    if (score >= 41) return { level: 'Medium', color: 'info', explanation: 'Medium risk - exploitable vulnerabilities with moderate impact.' };
+    if (score >= 21) return { level: 'Low', color: 'success', explanation: 'Low risk - minor issues, hard to exploit, limited impact.' };
+    return { level: 'Info', color: 'info', explanation: 'Minimal risk - well-bounded, validated inputs, safe operations.' }; // Use 'info' instead of 'default'
   };
 
   if (!functionData) return null;
@@ -271,8 +267,8 @@ const FunctionDetailModal: React.FC<FunctionDetailModalProps> = ({
             {aiExplanation?.risk_score !== undefined && (
               <Chip
                 icon={<Security />}
-                label={`Risk: ${getRiskLevel(aiExplanation.risk_score)} (${aiExplanation.risk_score})`}
-                color={getRiskColor(aiExplanation.risk_score) as any}
+                label={`Risk: ${getRiskLevelAndExplanation(aiExplanation.risk_score).level} (${aiExplanation.risk_score})`}
+                color={getRiskLevelAndExplanation(aiExplanation.risk_score).color as OverridableStringUnion<'default' | 'error' | 'warning' | 'info' | 'success' | 'primary' | 'secondary', {}>}
                 variant="outlined"
               />
             )}
@@ -406,7 +402,7 @@ const FunctionDetailModal: React.FC<FunctionDetailModalProps> = ({
                               <LinearProgress
                                 variant="determinate"
                                 value={aiExplanation.risk_score}
-                                color={getRiskColor(aiExplanation.risk_score) as any}
+                                color={getRiskLevelAndExplanation(aiExplanation.risk_score).color as OverridableStringUnion<'error' | 'success' | 'info' | 'warning' | 'primary' | 'secondary', {}>}
                                 sx={{ flexGrow: 1, height: 8, borderRadius: 4 }}
                               />
                               <Typography variant="body2" fontWeight="bold">
@@ -414,7 +410,7 @@ const FunctionDetailModal: React.FC<FunctionDetailModalProps> = ({
                               </Typography>
                             </Box>
                             <Typography variant="caption" color="textSecondary">
-                              Risk Level: {getRiskLevel(aiExplanation.risk_score)}
+                              Risk Level: {getRiskLevelAndExplanation(aiExplanation.risk_score).level}
                             </Typography>
                           </Box>
                         )}
@@ -464,43 +460,52 @@ const FunctionDetailModal: React.FC<FunctionDetailModalProps> = ({
               <TabPanel value={tabValue} index={2}>
                 {aiExplanation ? (
                   <Box>
-                    <Box display="flex" justifyContent="between" alignItems="center" mb={2}>
+                    <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
                       <Typography variant="h6">AI Analysis</Typography>
                       {aiExplanation.cached && (
-                        <Chip label="Cached" size="small" color="info" />
+                        <Chip label="Cached" size="small" color="info" sx={{ ml: 1 }} />
                       )}
                     </Box>
-                    
                     {/* Risk Score Card */}
-                    <Card sx={{ mb: 3 }}>
-                      <CardContent>
-                        <Box display="flex" alignItems="center" gap={2} mb={2}>
-                          <Security color={getRiskColor(aiExplanation.risk_score)} />
-                          <Typography variant="h6">
-                            Security Risk Assessment
-                          </Typography>
-                        </Box>
-                        <Box display="flex" alignItems="center" gap={2} mb={2}>
-                          <Box flexGrow={1}>
-                            <LinearProgress
-                              variant="determinate"
-                              value={aiExplanation.risk_score}
-                              color={getRiskColor(aiExplanation.risk_score) as any}
-                              sx={{ height: 12, borderRadius: 6 }}
-                            />
-                          </Box>
-                          <Chip
-                            label={`${aiExplanation.risk_score}/100`}
-                            color={getRiskColor(aiExplanation.risk_score) as any}
-                            variant="outlined"
-                          />
-                        </Box>
-                        <Typography variant="body2" color="textSecondary">
-                          Risk Level: <strong>{getRiskLevel(aiExplanation.risk_score)}</strong>
-                        </Typography>
-                      </CardContent>
-                    </Card>
-
+                    {aiExplanation.risk_score !== undefined && (() => {
+                      const { level, color, explanation } = getRiskLevelAndExplanation(aiExplanation.risk_score);
+                      return (
+                        <Card sx={{ mb: 3 }}>
+                          <CardContent>
+                            <Box display="flex" alignItems="center" gap={2} mb={2}>
+                              <Security color={color as OverridableStringUnion<'error' | 'success' | 'info' | 'warning' | 'primary' | 'secondary', {}>} />
+                              <Typography variant="h6">
+                                Security Risk Assessment
+                              </Typography>
+                            </Box>
+                            <Box display="flex" alignItems="center" gap={2} mb={2}>
+                              <Box flexGrow={1}>
+                                <LinearProgress
+                                  variant="determinate"
+                                  value={aiExplanation.risk_score}
+                                  color={color as OverridableStringUnion<'error' | 'success' | 'info' | 'warning' | 'primary' | 'secondary', {}>}
+                                  sx={{ height: 12, borderRadius: 6 }}
+                                />
+                              </Box>
+                              <Chip
+                                label={`${aiExplanation.risk_score}/100`}
+                                color={color as OverridableStringUnion<'default' | 'error' | 'success' | 'info' | 'warning' | 'primary' | 'secondary', {}>}
+                                variant="outlined"
+                              />
+                              <Chip
+                                label={level}
+                                color={color as OverridableStringUnion<'default' | 'error' | 'success' | 'info' | 'warning' | 'primary' | 'secondary', {}>}
+                                size="small"
+                              />
+                            </Box>
+                            <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
+                              {explanation}
+                            </Typography>
+                            <Divider sx={{ my: 2 }} />
+                          </CardContent>
+                        </Card>
+                      );
+                    })()}
                     {/* AI Explanation */}
                     <Card>
                       <CardContent>

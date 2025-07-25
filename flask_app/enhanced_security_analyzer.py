@@ -24,7 +24,7 @@ from flask_app.models import (
     Binary, Function, Import, Export, BinaryString, MemoryRegion, Symbol,
     UnifiedSecurityFinding, SecurityEvidence, Configuration
 )
-from flask_app.ai_service import AIService
+from flask_app.multi_provider_ai_service import MultiProviderAIService
 from flask_app.forwarder_dll_analyzer import ForwarderDLLAnalyzer
 
 logger = logging.getLogger(__name__)
@@ -36,13 +36,15 @@ class EnhancedSecurityAnalyzer:
     """
     
     def __init__(self):
-        self.ai_service = AIService()
+        self.ai_service = MultiProviderAIService()
         self._load_config()
     
     def reload_ai_service(self):
         """Reload AI service with updated configuration"""
         logger.info("Reloading AI service in enhanced security analyzer")
-        self.ai_service = AIService()
+        self.ai_service = MultiProviderAIService()
+        provider_name = getattr(self.ai_service, 'provider_name', 'unknown')
+        logger.info(f"Enhanced security analyzer reinitialized with {provider_name} provider")
         return self.ai_service.client is not None
         
         # Initialize forwarder DLL analyzer
@@ -478,68 +480,8 @@ class EnhancedSecurityAnalyzer:
     
     def _ai_analyze_security_strings(self, security_strings: List[Dict], binary: Binary) -> Dict[str, Any]:
         """Use AI to analyze security-relevant strings"""
-        try:
-            # Prepare strings for AI analysis
-            strings_text = '\n'.join([f"- {s['value']} (Category: {s['category']})" for s in security_strings[:20]])
-            
-            prompt = f"""
-Analyze these security-relevant strings found in the binary '{binary.filename}' for potential security issues:
-
-{strings_text}
-
-For each string that represents a genuine security concern, provide:
-1. **Title**: Brief security issue description
-2. **Severity**: CRITICAL, HIGH, MEDIUM, LOW, or INFO  
-3. **Description**: Detailed explanation of the security implication
-4. **CWE ID**: Relevant Common Weakness Enumeration ID
-5. **Confidence**: Your confidence level (0-100)
-
-Focus on:
-- Hardcoded credentials or API keys
-- Weak cryptographic algorithms
-- Command injection vectors
-- SQL injection patterns
-- Path traversal risks
-- Information disclosure
-
-Respond in JSON format:
-{{
-  "findings": [
-    {{
-      "title": "Hardcoded Credential Found",
-      "severity": "HIGH", 
-      "description": "...",
-      "cwe_id": "CWE-798",
-      "confidence": 85,
-      "affected_string": "...",
-      "remediation": "..."
-    }}
-  ]
-}}
-"""
-            
-            # For now, return basic string analysis findings without AI
-            # TODO: Implement dedicated string analysis AI method
-            basic_findings = []
-            for string_data in security_strings[:5]:  # Limit to top 5 security strings
-                basic_findings.append({
-                    'title': f'Security-Relevant String Found',
-                    'description': f'Found potentially security-relevant string: "{string_data.get("content", "")[:100]}..."',
-                    'severity': 'INFO',
-                    'confidence': 60,
-                    'category': 'string_analysis',
-                    'cwe_id': None,
-                    'detection_methods': ['string_pattern_matching'],
-                    'affected_code': f'String at {string_data.get("address", "unknown")}',
-                    'remediation': 'Review string usage for security implications',
-                    'risk_score': 60
-                })
-                
-            return {'findings': basic_findings}
-                
-        except Exception as e:
-            logger.error(f"Error in AI string analysis: {e}")
-            return {'findings': []}
+        # TODO: Implement dedicated string analysis AI method
+        return {'findings': []}
     
     def _analyze_imports_and_symbols(self, binary: Binary) -> Dict[str, Any]:
         """Analyze imports and symbols for security patterns"""

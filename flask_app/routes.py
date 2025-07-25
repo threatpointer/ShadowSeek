@@ -3079,10 +3079,21 @@ def update_configuration():
         
         logger.info(f"Configuration updated successfully. Updated {len(updates)} settings.")
         
-        # If OpenAI API key was updated, reload AI services
-        if 'OPENAI_API_KEY' in updates:
+        # If any AI provider key or LLM_PROVIDER was updated, reload AI services
+        ai_keys_updated = any(key in updates for key in ['OPENAI_API_KEY', 'CLAUDE_API_KEY', 'GEMINI_API_KEY', 'LLM_PROVIDER'])
+        if ai_keys_updated:
             try:
-                logger.info("OpenAI API key updated - reloading AI services")
+                updated_providers = []
+                if 'OPENAI_API_KEY' in updates:
+                    updated_providers.append('OpenAI')
+                if 'CLAUDE_API_KEY' in updates:
+                    updated_providers.append('Claude')
+                if 'GEMINI_API_KEY' in updates:
+                    updated_providers.append('Gemini')
+                if 'LLM_PROVIDER' in updates:
+                    updated_providers.append(f"Provider changed to {updates['LLM_PROVIDER']}")
+                
+                logger.info(f"AI configuration updated ({', '.join(updated_providers)}) - reloading AI services")
                 
                 # Reload AI service in task manager
                 current_app.task_manager.reload_ai_service()
@@ -3092,7 +3103,7 @@ def update_configuration():
                 analyzer = EnhancedSecurityAnalyzer()
                 analyzer.reload_ai_service()
                 
-                logger.info("AI services successfully reloaded with new API key")
+                logger.info("AI services successfully reloaded with new configuration")
                 
             except Exception as e:
                 logger.error(f"Error reloading AI services: {e}")
@@ -3101,7 +3112,7 @@ def update_configuration():
             'status': 'success',
             'message': f'Configuration updated successfully. Updated {len(updates)} settings.',
             'updated_keys': list(updates.keys()),
-            'ai_services_reloaded': 'OPENAI_API_KEY' in updates
+            'ai_services_reloaded': ai_keys_updated
         })
         
     except Exception as e:
@@ -3110,7 +3121,7 @@ def update_configuration():
 
 @api_bp.route('/ai/status', methods=['GET'])
 def get_ai_status():
-    """Get current AI service status"""
+    """Get current AI service status for all providers"""
     try:
         from flask_app.enhanced_security_analyzer import EnhancedSecurityAnalyzer
         
@@ -3118,19 +3129,45 @@ def get_ai_status():
         tm_ai_service = current_app.task_manager._get_ai_service()
         tm_status = {
             'initialized': tm_ai_service.client is not None,
-            'api_key_configured': tm_ai_service.api_key is not None,
-            'model': tm_ai_service.model
+            'provider': getattr(tm_ai_service, 'provider_name', 'unknown'),
+            'api_key_configured': bool(getattr(tm_ai_service.provider, 'api_key', None)) if tm_ai_service.provider else False,
+            'model': getattr(tm_ai_service.provider, 'model', 'unknown') if tm_ai_service.provider else 'unknown'
         }
         
         # Check enhanced security analyzer AI service  
         analyzer = EnhancedSecurityAnalyzer()
         esa_status = {
             'initialized': analyzer.ai_service.client is not None,
-            'api_key_configured': analyzer.ai_service.api_key is not None,
-            'model': analyzer.ai_service.model
+            'provider': getattr(analyzer.ai_service, 'provider_name', 'unknown'),
+            'api_key_configured': bool(getattr(analyzer.ai_service.provider, 'api_key', None)) if analyzer.ai_service.provider else False,
+            'model': getattr(analyzer.ai_service.provider, 'model', 'unknown') if analyzer.ai_service.provider else 'unknown'
         }
         
+        # Get environment configuration for all providers
+        import os
+        providers_config = {
+            'openai': {
+                'api_key_configured': bool(os.getenv('OPENAI_API_KEY')),
+                'model': os.getenv('OPENAI_MODEL', 'gpt-3.5-turbo'),
+                'available': bool(os.getenv('OPENAI_API_KEY'))
+            },
+            'claude': {
+                'api_key_configured': bool(os.getenv('CLAUDE_API_KEY')),
+                'model': os.getenv('CLAUDE_MODEL', 'claude-3-sonnet-20240229'),
+                'available': bool(os.getenv('CLAUDE_API_KEY'))
+            },
+            'gemini': {
+                'api_key_configured': bool(os.getenv('GEMINI_API_KEY')),
+                'model': os.getenv('GEMINI_MODEL', 'gemini-pro'),
+                'available': bool(os.getenv('GEMINI_API_KEY'))
+            }
+        }
+        
+        current_provider = os.getenv('LLM_PROVIDER', 'openai').lower()
+        
         return jsonify({
+            'current_provider': current_provider,
+            'providers_config': providers_config,
             'task_manager_ai': tm_status,
             'enhanced_security_analyzer_ai': esa_status,
             'overall_status': 'ready' if (tm_status['initialized'] and esa_status['initialized']) else 'not_configured'
@@ -3142,10 +3179,13 @@ def get_ai_status():
 
 @api_bp.route('/config/test-connection', methods=['POST'])
 def test_ai_connection():
-    """Test AI service connection"""
+    """Test AI service connection for all supported providers"""
     try:
         data = request.json or {}
         provider = data.get('provider', 'openai').lower()
+        
+        # Import the multi-provider AI service
+        from flask_app.multi_provider_ai_service import MultiProviderAIService
         
         # Test the connection based on provider
         if provider == 'openai':
@@ -3157,8 +3197,7 @@ def test_ai_connection():
                 return jsonify({'error': 'API key is required'}), 400
             
             # Try to initialize AI service with the test API key
-            from flask_app.ai_service import AIService
-            test_ai_service = AIService(api_key=api_key, model=model)
+            test_ai_service = MultiProviderAIService(provider='openai', api_key=api_key, model=model)
             
             if not test_ai_service.client:
                 return jsonify({
@@ -3166,41 +3205,99 @@ def test_ai_connection():
                 }), 400
             
             try:
-                # Make a simple test call
-                test_context = {
-                    "function_name": "test_function",
-                    "function_address": "0x1000",
-                    "decompiled_code": "int test_function() { return 42; }",
-                    "signature": "int test_function(void)",
-                    "size": 16
-                }
+                # Test the connection
+                test_result = test_ai_service.test_connection()
                 
-                response = test_ai_service.explain_function(test_context)
-                
-                if response and response.get('success'):
+                if test_result.get('success'):
                     return jsonify({
                         'success': True,
-                        'message': f'{provider.upper()} connection test successful!'
+                        'message': f'OpenAI connection test successful!'
                     })
                 else:
-                    error_msg = response.get('error', 'Unknown error') if response else 'No response received'
                     return jsonify({
-                        'error': f'{provider.upper()} connection test failed: {error_msg}'
+                        'error': f'OpenAI connection test failed: {test_result.get("error", "Unknown error")}'
                     }), 400
                     
             except Exception as test_error:
-                logger.error(f"AI connection test error: {test_error}")
+                logger.error(f"OpenAI connection test error: {test_error}")
                 return jsonify({
-                    'error': f'{provider.upper()} connection test failed: {str(test_error)}'
+                    'error': f'OpenAI connection test failed: {str(test_error)}'
                 }), 400
                 
+        elif provider == 'claude':
+            api_key = data.get('api_key')
+            model = data.get('model', 'claude-3-sonnet-20240229')
+            
+            if not api_key:
+                return jsonify({'error': 'API key is required'}), 400
+            
+            try:
+                # Try to initialize Claude AI service
+                test_ai_service = MultiProviderAIService(provider='claude', api_key=api_key, model=model)
+                
+                if not test_ai_service.client:
+                    return jsonify({
+                        'error': 'Failed to initialize Claude client. Make sure anthropic package is installed.'
+                    }), 400
+                
+                # Test the connection
+                test_result = test_ai_service.test_connection()
+                
+                if test_result.get('success'):
+                    return jsonify({
+                        'success': True,
+                        'message': f'Claude connection test successful!'
+                    })
+                else:
+                    return jsonify({
+                        'error': f'Claude connection test failed: {test_result.get("error", "Unknown error")}'
+                    }), 400
+                    
+            except Exception as test_error:
+                logger.error(f"Claude connection test error: {test_error}")
+                return jsonify({
+                    'error': f'Claude connection test failed: {str(test_error)}'
+                }), 400
+        
+        elif provider == 'gemini':
+            api_key = data.get('api_key')
+            model = data.get('model', 'gemini-pro')
+            
+            if not api_key:
+                return jsonify({'error': 'API key is required'}), 400
+            
+            try:
+                # Try to initialize Gemini AI service
+                test_ai_service = MultiProviderAIService(provider='gemini', api_key=api_key, model=model)
+                
+                if not test_ai_service.client:
+                    return jsonify({
+                        'error': 'Failed to initialize Gemini client. Make sure google-generativeai package is installed.'
+                    }), 400
+                
+                # Test the connection
+                test_result = test_ai_service.test_connection()
+                
+                if test_result.get('success'):
+                    return jsonify({
+                        'success': True,
+                        'message': f'Gemini connection test successful!'
+                    })
+                else:
+                    return jsonify({
+                        'error': f'Gemini connection test failed: {test_result.get("error", "Unknown error")}'
+                    }), 400
+                    
+            except Exception as test_error:
+                logger.error(f"Gemini connection test error: {test_error}")
+                return jsonify({
+                    'error': f'Gemini connection test failed: {str(test_error)}'
+                }), 400
+        
         else:
-            # For other providers, just return success for now
-            # TODO: Implement actual connection tests for other providers
             return jsonify({
-                'success': True,
-                'message': f'{provider.upper()} connection test successful! (mock response)'
-            })
+                'error': f'Unsupported provider: {provider}. Supported providers: openai, claude, gemini'
+            }), 400
         
     except Exception as e:
         logger.error(f"Error testing AI connection: {e}")

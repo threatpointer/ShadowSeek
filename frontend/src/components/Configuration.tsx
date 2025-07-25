@@ -176,9 +176,9 @@ const Configuration: React.FC = () => {
       openai_model: 'gpt-3.5-turbo',
       openai_base_url: 'https://api.openai.com/v1',
       gemini_api_key: '',
-      gemini_model: 'gemini-pro',
+      gemini_model: 'gemini-2.5-flash',
       claude_api_key: '',
-      claude_model: 'claude-3-sonnet-20240229',
+      claude_model: 'claude-3-5-sonnet-20241022',
       ollama_base_url: 'http://localhost:11434',
       ollama_model: 'llama2',
       llm_timeout: 60,
@@ -399,13 +399,15 @@ const Configuration: React.FC = () => {
                   <FormControl fullWidth margin="normal">
                     <InputLabel>Model</InputLabel>
                     <Select
-                      value={config.gemini_model || 'gemini-pro'}
+                      value={config.gemini_model || 'gemini-2.5-flash'}
                       onChange={(e) => handleConfigChange('gemini_model', e.target.value)}
                       label="Model"
                     >
-                      <MenuItem value="gemini-pro">Gemini Pro</MenuItem>
-                      <MenuItem value="gemini-1.5-pro">Gemini 1.5 Pro</MenuItem>
-                      <MenuItem value="gemini-1.5-flash">Gemini 1.5 Flash</MenuItem>
+                      <MenuItem value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite (Fastest)</MenuItem>
+                      <MenuItem value="gemini-2.5-flash">Gemini 2.5 Flash (Balanced)</MenuItem>
+                      <MenuItem value="gemini-2.5-pro">Gemini 2.5 Pro (Most Capable)</MenuItem>
+                      <MenuItem value="gemini-2.0-flash">Gemini 2.0 Flash (Next-Gen)</MenuItem>
+                      <MenuItem value="gemini-1.5-flash">Gemini 1.5 Flash (Legacy)</MenuItem>
                     </Select>
                   </FormControl>
 
@@ -460,13 +462,15 @@ const Configuration: React.FC = () => {
                   <FormControl fullWidth margin="normal">
                     <InputLabel>Model</InputLabel>
                     <Select
-                      value={config.claude_model || 'claude-3-sonnet-20240229'}
+                      value={config.claude_model || 'claude-3-5-sonnet-20241022'}
                       onChange={(e) => handleConfigChange('claude_model', e.target.value)}
                       label="Model"
                     >
-                      <MenuItem value="claude-3-haiku-20240307">Claude 3 Haiku (Fast)</MenuItem>
-                      <MenuItem value="claude-3-sonnet-20240229">Claude 3 Sonnet (Balanced)</MenuItem>
-                      <MenuItem value="claude-3-opus-20240229">Claude 3 Opus (Advanced)</MenuItem>
+                      <MenuItem value="claude-3-5-haiku-20241022">Claude 3.5 Haiku (Fast)</MenuItem>
+                      <MenuItem value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet (Balanced)</MenuItem>
+                      <MenuItem value="claude-3-7-sonnet-20250219">Claude 3.7 Sonnet (Enhanced)</MenuItem>
+                      <MenuItem value="claude-sonnet-4-20250514">Claude 4 Sonnet (Latest)</MenuItem>
+                      <MenuItem value="claude-opus-4-20250514">Claude 4 Opus (Most Capable)</MenuItem>
                     </Select>
                   </FormControl>
 

@@ -1082,8 +1082,6 @@ class TaskManager:
                 import re
                 
                 logger.info(f"Headless decompilation successful for {function_address}, parsing output...")
-                logger.debug(f"Full stdout length: {len(stdout)} chars")
-                logger.debug(f"Headless stdout: {stdout[:500]}...")  # Log first 500 chars
                 
                 # Look for JSON result in stdout
                 json_patterns = [
@@ -1440,21 +1438,15 @@ class TaskManager:
             result: Bulk AI explanation result
         """
         try:
-            logger.info(f"[STORAGE DEBUG] Starting storage for task {task_id}, binary {binary_id}")
-            logger.info(f"[STORAGE DEBUG] Function IDs count: {len(function_ids)}")
-            logger.info(f"[STORAGE DEBUG] Result structure: {result.keys() if isinstance(result, dict) else type(result)}")
-            logger.info(f"[STORAGE DEBUG] Result success: {result.get('success') if isinstance(result, dict) else 'N/A'}")
+            logger.info(f"Starting bulk AI storage for task {task_id}, binary {binary_id}")
             
             # Store individual function results first (this is what was missing!)
             if result.get("success") and "results" in result:
                 function_results = result["results"]
-                logger.info(f"[STORAGE DEBUG] Function results found: {len(function_results)} functions")
-                logger.info(f"[STORAGE DEBUG] Sample function result keys: {list(function_results.keys())[:3]}")
+                logger.info(f"Processing {len(function_results)} function AI results")
                 
                 successful_updates = 0
                 for function_id, func_result in function_results.items():
-                    logger.debug(f"[STORAGE DEBUG] Processing function {function_id}: {func_result.keys() if isinstance(func_result, dict) else type(func_result)}")
-                    
                     if func_result.get("success"):
                         function = Function.query.get(function_id)
                         if function:
@@ -1463,13 +1455,11 @@ class TaskManager:
                             function.risk_score = func_result.get("risk_score")
                             function.ai_analyzed = True
                             successful_updates += 1
-                            
-                            logger.info(f"[STORAGE DEBUG] Updated function {function.name or function.address} with AI analysis (risk: {function.risk_score})")
                         else:
-                            logger.warning(f"[STORAGE DEBUG] Function {function_id} not found in database")
+                            logger.warning(f"Function {function_id} not found in database")
                     else:
                         error_msg = func_result.get('error', 'Unknown error')
-                        logger.warning(f"[STORAGE DEBUG] AI analysis failed for function {function_id}: {error_msg}")
+                        logger.warning(f"AI analysis failed for function {function_id}: {error_msg}")
                         
                         # If it's a client initialization error, suggest checking configuration
                         if 'client not initialized' in error_msg.lower():
@@ -1477,10 +1467,9 @@ class TaskManager:
                 
                 # Commit individual function updates
                 db.session.commit()
-                logger.info(f"[STORAGE DEBUG] Successfully updated {successful_updates} functions with AI analysis")
+                logger.info(f"Successfully updated {successful_updates} functions with AI analysis")
             else:
-                logger.warning(f"[STORAGE DEBUG] No results found in bulk AI result. Result keys: {result.keys() if isinstance(result, dict) else 'Not a dict'}")
-                logger.warning(f"[STORAGE DEBUG] Result content: {result}")
+                logger.warning(f"No results found in bulk AI result. Result keys: {result.keys() if isinstance(result, dict) else 'Not a dict'}")
             
             # Store the overall bulk result
             analysis_result = AnalysisResult(
@@ -1494,17 +1483,10 @@ class TaskManager:
             db.session.add(analysis_result)
             db.session.commit()
             
-            logger.info(f"[STORAGE DEBUG] Stored bulk AI explanation results for task {task_id}")
+            logger.info(f"Stored bulk AI explanation results for task {task_id}")
             
         except Exception as e:
-            logger.error(f"[STORAGE DEBUG] Error storing bulk AI explanation results: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            # Try to rollback to prevent partial updates
-            try:
-                db.session.rollback()
-            except:
-                pass
+            logger.error(f"Error storing bulk AI explanation results: {e}")
     
     def _generate_binary_ai_summary(self, binary_id, binary_path, **kwargs):
         """
@@ -1963,17 +1945,17 @@ class TaskManager:
     
     def _get_ai_service(self):
         """Get or create AI service for function explanation"""
-        # Import AI service (we'll create this next)
-        from .ai_service import AIService
+        # Import multi-provider AI service
+        from .multi_provider_ai_service import MultiProviderAIService
         
         if not hasattr(self, '_ai_service'):
-            self._ai_service = AIService()
+            self._ai_service = MultiProviderAIService()
         
         return self._ai_service
     
     def reload_ai_service(self):
         """Reload AI service with updated configuration"""
-        from .ai_service import AIService
+        from .multi_provider_ai_service import MultiProviderAIService
         logger.info("Reloading AI service with updated configuration")
         
         # Clear cached AI service
@@ -1981,13 +1963,14 @@ class TaskManager:
             delattr(self, '_ai_service')
         
         # Create new AI service instance
-        self._ai_service = AIService()
+        self._ai_service = MultiProviderAIService()
         
         # Log the status
         if self._ai_service.client:
-            logger.info("AI service successfully reinitialized with API key")
+            provider_name = getattr(self._ai_service, 'provider_name', 'unknown')
+            logger.info(f"AI service successfully reinitialized with {provider_name} provider")
         else:
-            logger.warning("AI service reinitialized but no valid API key found")
+            logger.warning("AI service reinitialized but no valid provider/API key found")
         
         return self._ai_service.client is not None
     
