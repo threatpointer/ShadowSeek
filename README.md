@@ -2,11 +2,13 @@
 
 🔍 **Enterprise-grade binary security analysis with AI-powered vulnerability detection and intelligent fuzzing harness generation**
 
+> **Author**: [Mohammed Tanveer (@threatpointer)](https://github.com/threatpointer) - Security Researcher & Architect
+
 > ⚠️ **Important**: All system-dependent hardcoded paths have been removed for portability. Use our **automated setup scripts** for easy configuration!
 > 
 > 🚀 **Quick Setup**: Run `python setup_environment.py` (recommended) or `setup_environment.bat` (Windows) to automatically configure your environment.
 > 
-> 📚 **Documentation**: See [SETUP_SCRIPTS_README.md](SETUP_SCRIPTS_README.md) for setup guide and [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md) for manual configuration.
+> 📚 **Documentation**: See [Docs/SETUP_SCRIPTS_README.md](Docs/SETUP_SCRIPTS_README.md) for setup guide and [Docs/ENVIRONMENT_VARIABLES.md](Docs/ENVIRONMENT_VARIABLES.md) for manual configuration.
 
 ## 🌟 Platform Overview
 
@@ -17,25 +19,12 @@ ShadowSeek is a revolutionary binary security analysis platform that transforms 
 - 🧠 **AI-Powered Security Analysis** - LLM-enhanced vulnerability detection with evidence-based confidence scoring
 - 🎯 **Intelligent Fuzzing** - AI-driven fuzzing harness generation for AFL/AFL++ with target selection automation
 - 🛡️ **Comprehensive Vulnerability Detection** - 75+ dangerous function patterns with CWE/CVE classification
+- 🔄 **Binary Differential Analysis** - Advanced BinDiff capabilities using ghidriff for comparing binary versions and tracking changes
 - 🎨 **Professional User Experience** - Modern React UI with syntax highlighting and seamless navigation
 - 📊 **Unified Security Dashboard** - Single-pane-of-glass for complete security analysis workflow
 - ⚡ **Production-Ready Output** - Enterprise-quality harnesses and professional security reports
 
-## 🆕 Version 2.0 Enhancements
-
-### **Enhanced Task Management**
-- **🛑 Smart Task Control**: Stop all tasks for specific binaries with one click
-- **📊 Automatic Status Updates**: Binary status automatically updates when analysis completes
-- **🔄 Robust Operations**: Delete processing binaries with automatic task stopping
-- **⚙️ Consistent Analysis**: All restart operations use comprehensive analysis
-
-### **Improved User Experience**
-- **🎯 Focused Interfaces**: Simple fuzzing interface in binary details for quick operations
-- **⚠️ Enhanced Confirmations**: Clear warnings and detailed feedback for all operations
-- **🔔 Real-time Notifications**: Toast notifications with detailed status and progress updates
-- **🎨 Visual Excellence**: Better status indicators, tooltips, and visual feedback
-
-## 🚀 Revolutionary Capabilities
+## 🚀 Advanced Capabilities
 
 ### **Unified Security Analysis**
 - **AI + Pattern Correlation**: Intelligent validation combining LLM insights with static analysis
@@ -100,8 +89,8 @@ ShadowSeek is a revolutionary binary security analysis platform that transforms 
 
 ### 1. Clone and Setup
 ```bash
-git clone https://github.com/yourusername/shadowseek.git
-cd shadowseek
+git clone https://github.com/threatpointer/ShadowSeek.git
+cd ShadowSeek
 
 # Create virtual environment
 python -m venv venv
@@ -117,7 +106,7 @@ pip install -r requirements.txt
 cp env_template.txt .env
 
 # Edit .env with your settings:
-# - GHIDRA_PATH: Your Ghidra installation directory
+# - GHIDRA_INSTALL_DIR: Your Ghidra installation directory
 # - AI API keys for enhanced analysis
 # - Database and upload paths
 ```
@@ -154,26 +143,6 @@ Function Navigation → Fuzzing Generation → Code Viewing →
 Download & Deploy → Vulnerability Hunting
 ```
 
-### **1. Upload & Analyze**
-- Drag-and-drop binary files for automatic analysis
-- Real-time progress tracking with intelligent status updates
-- Complete function decompilation and metadata extraction
-
-### **2. Security Analysis**
-- One-click unified security analysis combining AI + pattern detection
-- Evidence-based confidence scoring with clear justification
-- Professional security findings with CWE/CVE classification
-
-### **3. Intelligent Fuzzing**
-- AI-powered target selection based on security analysis results
-- Production-ready AFL/AFL++ harness generation with documentation
-- Multiple fuzzing strategies tailored to vulnerability types
-
-### **4. Professional Reporting**
-- Beautiful code viewing with VS Code-style syntax highlighting
-- Complete download packages with build systems and documentation
-- Enterprise-ready reports suitable for security teams
-
 ## 📊 API Reference
 
 ### **Core Endpoints**
@@ -193,7 +162,7 @@ Download & Deploy → Vulnerability Hunting
 
 ### **Project Structure**
 ```
-shadowseek/
+ShadowSeek/
 ├── flask_app/                 # Backend API and services
 │   ├── models.py             # Database models
 │   ├── routes.py             # API endpoints
@@ -201,86 +170,46 @@ shadowseek/
 │   └── fuzzing_harness_generator.py  # Fuzzing system
 ├── frontend/                  # React frontend
 │   └── src/components/       # Professional UI components
-├── memory-bank/              # Platform documentation
+├── Docs/                     # Technical documentation
+├── user-docs/                # User documentation and guides
 ├── analysis_scripts/         # Ghidra analysis scripts
-└── docs/                     # Technical documentation
-```
-
-### **Adding New Features**
-1. **Security Patterns**: Add to vulnerability engine pattern database
-2. **AI Prompts**: Enhance security analysis prompts for better detection
-3. **Fuzzing Strategies**: Implement new fuzzing approaches
-4. **UI Components**: Create professional React components
-
-## 🛡️ Security Considerations
-
-### **Analysis Isolation**
-- Binaries analyzed in sandboxed Ghidra environment
-- Memory and CPU limits for analysis operations
-- Automatic cleanup of temporary analysis files
-
-### **Data Protection**
-- Secure file upload validation and size limits
-- SQLite database with proper relationship integrity
-- Configurable retention policies for analysis results
-
-### **Enterprise Integration**
-- API-first design for enterprise tool integration
-- Comprehensive logging and audit trails
-- Role-based access control ready (future enhancement)
-
-## 🔧 Troubleshooting
-
-### **Bridge Connection Issues**
-```bash
-# Check bridge status
-python test_bridge_connection.py
-
-# Restart bridge server
-python start_ghidra_bridge.py
-
-# View logs
-tail -f logs/app.log
-```
-
-### **Database Issues**
-```bash
-# Reset database
-python reset_db.py
-
-# Re-run migrations
-python migrate_database.py
-```
-
-### **Frontend Issues**
-```bash
-# Clear cache and rebuild
-cd frontend
-rm -rf node_modules package-lock.json
-npm install
-npm start
+├── uploads/                  # Binary upload directory
+├── temp/                     # Temporary analysis files
+└── logs/                     # Application logs
 ```
 
 ## 📚 Documentation
 
-- **[API Documentation](API_DOCUMENTATION.md)** - Complete REST API reference
-- **[Quick Reference](Docs/QUICK_REFERENCE.md)** - Common operations guide
-- **[Memory Bank](memory-bank/)** - Platform architecture and workflows
-- **[Troubleshooting](GHIDRA_BRIDGE_TROUBLESHOOTING.md)** - Bridge connection issues
+- **[Complete Documentation](Docs/)** - Full technical documentation
+- **[User Guides](user-docs/)** - Step-by-step user documentation
+- **[API Reference](Docs/API_DOCUMENTATION.md)** - Complete REST API reference
+- **[Setup Guide](Docs/SETUP_SCRIPTS_README.md)** - Automated setup documentation
+- **[Environment Variables](Docs/ENVIRONMENT_VARIABLES.md)** - Configuration reference
 
-## 🎉 Success Stories
+## 👨‍💻 About the Author
 
-### **Enterprise Impact**
-- **75% Workflow Reduction**: Intelligent automation eliminates manual complexity
-- **100% Result Consistency**: Unified analysis eliminates conflicting findings
-- **Production Quality**: Enterprise-ready output suitable for professional security teams
-- **Complete Automation**: AI-driven workflow from analysis to vulnerability hunting
+**[Mohammed Tanveer (@threatpointer)](https://github.com/threatpointer)** - Security Researcher & Architect  
+**Links**: [GitHub](https://github.com/threatpointer) | [Twitter](https://twitter.com/threatpointer) | [LinkedIn](https://linkedin.com/in/mdtanveer)
 
-### **Technical Excellence**
-- **Revolutionary Fuzzing**: AI-powered target selection with evidence-based rationale
-- **Comprehensive Security**: 75+ dangerous function patterns with intelligent validation
-- **Professional Experience**: Beautiful syntax highlighting with seamless workflow integration
-- **Scalable Foundation**: Architecture designed for advanced security capabilities
+## 🏆 Acknowledgments
+
+### **Binary Differential Analysis**
+
+ShadowSeek's binary comparison and differential analysis capabilities are powered by **[ghidriff](https://github.com/clearbluejar/ghidriff)**, an exceptional Python command-line Ghidra binary diffing engine.
+
+**Special thanks to:**
+- **[@clearbluejar](https://github.com/clearbluejar)** - Creator and maintainer of ghidriff
+- **Project**: [ghidriff - Python Command-Line Ghidra Binary Diffing Engine](https://github.com/clearbluejar/ghidriff)
+- **Connect**: [GitHub](https://github.com/clearbluejar) | [Twitter/X](https://x.com/clearbluejar)
+
+ghidriff enables ShadowSeek to perform sophisticated binary comparisons with professional-grade accuracy and detailed reporting.
+
+### **Open Source Foundation**
+
+ShadowSeek builds upon excellent open-source projects:
+- **[Ghidra](https://ghidra-sre.org/)** - NSA's Software Reverse Engineering Framework
+- **[AFL/AFL++](https://github.com/AFLplusplus/AFLplusplus)** - Advanced fuzzing frameworks
+- **[React](https://reactjs.org/)** & **[Flask](https://flask.palletsprojects.com/)** - Frontend and backend frameworks
 
 ## 📄 License
 
@@ -290,11 +219,16 @@ MIT License - See [LICENSE](LICENSE) file for details
 
 We welcome contributions! Please see our contributing guidelines and code of conduct.
 
+**Security Contributions**: Given the security focus of this platform, we especially welcome contributions from security researchers and practitioners.
+
 ## 📞 Support
 
-- **Documentation**: [memory-bank/](memory-bank/)
-- **Issues**: GitHub Issues
+- **Documentation**: [Docs/](Docs/) and [user-docs/](user-docs/)
+- **Issues**: [GitHub Issues](https://github.com/threatpointer/ShadowSeek/issues)
+- **Security Issues**: Please report security vulnerabilities privately to [@threatpointer](https://github.com/threatpointer)
 
 ---
 
-**ShadowSeek** - Transforming binary security analysis through AI-powered intelligence and professional automation. 🔍✨ 
+**ShadowSeek** - Transforming binary security analysis through AI-powered intelligence and professional automation.
+
+*Developed with ❤️ by [@threatpointer](https://github.com/threatpointer) for the global cybersecurity community* 🔍✨ 
