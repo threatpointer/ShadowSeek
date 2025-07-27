@@ -564,9 +564,9 @@ npm --version
 - **Health Status**: http://localhost:5000/api/health
 - **System Status**: http://localhost:5000/api/system/status
 
-### **Emergency Contacts**
-- **System Administrator**: admin@company.com
-- **Technical Support**: support@company.com
-- **Security Team**: security@company.com
+### **Support Resources**
+- **Documentation**: Complete guides available in user-docs/
+- **GitHub Issues**: Report technical issues and bugs
+- **Community**: Join discussions for peer support
 
 Remember to customize these configurations based on your specific deployment environment and security requirements. 

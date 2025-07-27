@@ -191,7 +191,7 @@ If you encounter issues during setup:
 
 1. **Check [Troubleshooting](../administration/troubleshooting.md)** for common solutions
 2. **Review [FAQ](../administration/troubleshooting.md#faq)** for frequently asked questions
-3. **Contact support** at dev@shadowseek.security
+3. **Open a GitHub Issue** for technical support
 4. **Join community discussions** for peer assistance
 
 ---

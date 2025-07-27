@@ -7,7 +7,7 @@ import os
 import uuid
 import hashlib
 from datetime import datetime
-from flask import jsonify, current_app, request, send_file, make_response
+from flask import jsonify, current_app, request, send_file, make_response, send_from_directory
 from werkzeug.utils import secure_filename
 import logging
 import shutil
@@ -15,6 +15,10 @@ import zipfile
 import io
 import threading
 import time
+import ghidriff
+import json
+import subprocess
+import sys
 
 from . import api_bp, db
 from .models import (Binary, AnalysisTask, AnalysisResult, Function, MemoryRegion,
@@ -40,6 +44,17 @@ def get_file_hash(file_path):
         for byte_block in iter(lambda: f.read(4096), b""):
             sha256_hash.update(byte_block)
     return sha256_hash.hexdigest()
+
+# Serve static docs files
+@api_bp.route('/Docs/<path:filename>')
+def serve_docs(filename):
+    """Serve static documentation files from Docs directory"""
+    try:
+        docs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'Docs')
+        return send_from_directory(docs_dir, filename)
+    except Exception as e:
+        logger.error(f"Error serving docs file {filename}: {e}")
+        return jsonify({'error': 'File not found'}), 404
 
 # Add documentation endpoints
 @api_bp.route('/docs/<path:doc_path>', methods=['GET'])
@@ -3448,257 +3463,170 @@ def get_fuzzing_ready_binaries():
 
 @api_bp.route('/analysis/diff', methods=['POST'])
 def compare_binaries():
-    """Compare two binaries and find differences"""
+    """Compare two binaries and find differences using ghidriff"""
     try:
-        # Get request data
         data = request.get_json()
         binary_id1 = data.get('binary_id1')
         binary_id2 = data.get('binary_id2')
-        diff_type = data.get('diff_type', 'instructions')
-        
-        # Validate inputs
+        diff_type = data.get('diff_type', 'simple')
+        performance_mode = data.get('performance_mode', 'balanced')  # 'speed', 'balanced', or 'accuracy'
+
         if not binary_id1 or not binary_id2:
             return jsonify({'error': 'Both binary_id1 and binary_id2 are required'}), 400
-            
-        # Check if binaries exist
+
         binary1 = Binary.query.get(binary_id1)
         binary2 = Binary.query.get(binary_id2)
-        
         if not binary1:
             return jsonify({'error': f'Binary with ID {binary_id1} not found'}), 404
         if not binary2:
             return jsonify({'error': f'Binary with ID {binary_id2} not found'}), 404
-            
+
+        # Enforce 1GB file size limit
+        if binary1.file_size > 1024**3 or binary2.file_size > 1024**3:
+            return jsonify({'error': 'Each binary must be ≤ 1GB in size'}), 400
+
+        # Prepare file paths
+        file1 = binary1.file_path
+        file2 = binary2.file_path
+        if not (os.path.exists(file1) and os.path.exists(file2)):
+            return jsonify({'error': 'One or both binary files are missing on disk'}), 404
+
         # Create a task for binary comparison
         task = AnalysisTask(
             id=str(uuid.uuid4()),
-            binary_id=binary_id1,  # Associate with first binary
+            binary_id=binary_id1,
             task_type='binary_comparison',
-            status='completed',  # Set to completed immediately
+            status='running',
             priority=1,
             parameters={
                 'binary_id1': binary_id1,
                 'binary_id2': binary_id2,
                 'diff_type': diff_type
             },
-            progress=100,
+            progress=0,
             started_at=datetime.utcnow(),
-            completed_at=datetime.utcnow()
+            completed_at=None
         )
-        
         db.session.add(task)
         db.session.commit()
-        
-        logger.info(f"Binary comparison task {task.id} created and marked as completed")
-        
+
+        # Run ghidriff using the new simplified wrapper
+        try:
+            # Import our simplified wrapper
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../analysis_scripts'))
+            from ghidriff_simple_wrapper import run_ghidriff
+            
+            # Map frontend diff types to ghidriff engine names
+            # Note: "StructualGraphDiff" has a typo in the ghidriff codebase
+            engine_map = {
+                'simple': 'SimpleDiff',
+                'structural_graph': 'StructualGraphDiff',  # Note: Typo in ghidriff
+                'version_tracking': 'VersionTrackingDiff'
+            }
+            engine_type = engine_map.get(diff_type, 'VersionTrackingDiff')
+            
+            # Create output directory
+            results_dir = os.path.join('uploads', 'diff_results', task.id)
+            os.makedirs(results_dir, exist_ok=True)
+            
+            logger.info(f"Starting ghidriff comparison: {file1} vs {file2} using {engine_type}")
+            
+            # Run ghidriff with the simplified wrapper and automatic database saving
+            diff_results = run_ghidriff(
+                binary1_path=file1, 
+                binary2_path=file2, 
+                engine_type=engine_type, 
+                output_dir=results_dir,
+                timeout_minutes=15,
+                task_id=task.id,
+                binary_id1=binary_id1,
+                binary_id2=binary_id2,
+                diff_type=diff_type,
+                auto_save_db=True,
+                performance_mode=performance_mode
+            )
+            
+            if not diff_results['success']:
+                raise RuntimeError("ghidriff returned unsuccessful result")
+            
+            logger.info(f"ghidriff completed successfully: {diff_results['summary']}")
+            
+            # Create structured result for the API
+            structured_result = {
+                'engine': engine_type,
+                'binary1': diff_results['binary1'],
+                'binary2': diff_results['binary2'],
+                'summary': diff_results['summary'],
+                'markdown': diff_results['markdown'],
+                'json_data': diff_results['json_data'],
+                'output_files': diff_results['output_files'],
+                'stdout': diff_results['stdout']
+            }
+            
+            # Convert to JSON for storage
+            diff_json = json.dumps(structured_result, indent=2)
+            
+        except Exception as e:
+            error_msg = f"ghidriff execution failed: {str(e)}"
+            task.status = 'failed'
+            task.error_message = error_msg
+            db.session.commit()
+            logger.error(error_msg)
+            return jsonify({'error': error_msg}), 500
+
+        # Store result in AnalysisResult
+        analysis_result = AnalysisResult(
+            binary_id=binary_id1,  # Link to first binary
+            task_id=task.id,
+            analysis_type='binary_diff',
+            results=diff_json,
+            meta_data={
+                'binary_id2': binary_id2,
+                'results_dir': results_dir,
+                'engine_type': engine_type,
+                'diff_type': diff_type
+            }
+        )
+        db.session.add(analysis_result)
+        # Mark task as completed
+        task.status = 'completed'
+        task.progress = 100
+        task.completed_at = datetime.utcnow()
+        db.session.commit()
+
         return jsonify({
             'task_id': task.id,
             'status': 'completed',
-            'message': f'Binary comparison task created. Comparing {binary1.original_filename} with {binary2.original_filename}.'
+            'diff_result': diff_json
         })
-        
     except Exception as e:
         logger.error(f"Error in binary comparison: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @api_bp.route('/analysis/diff/<task_id>', methods=['GET'])
 def get_binary_comparison_results(task_id):
-    """Get results of a binary comparison task"""
+    """Get results of a binary comparison task (real results)"""
     try:
-        # Find the task
         task = AnalysisTask.query.get(task_id)
-        
         if not task:
             return jsonify({'error': f'Task with ID {task_id} not found'}), 404
-            
         if task.task_type != 'binary_comparison':
             return jsonify({'error': 'Task is not a binary comparison task'}), 400
-            
-        # Get the binaries
-        binary_id1 = task.parameters.get('binary_id1')
-        binary_id2 = task.parameters.get('binary_id2')
-        diff_type = task.parameters.get('diff_type', 'instructions')
-        
-        binary1 = Binary.query.get(binary_id1)
-        binary2 = Binary.query.get(binary_id2)
-        
-        if not binary1 or not binary2:
-            return jsonify({'error': 'One or both binaries not found'}), 404
-        
-        # Check task status
-        if task.status == 'queued' or task.status == 'running':
+        if task.status in ['queued', 'running']:
             return jsonify({
                 'task_id': task.id,
                 'status': task.status,
-                'progress': task.progress,
-                'binary_id1': binary_id1,
-                'binary_id2': binary_id2,
-                'diff_type': diff_type
+                'progress': task.progress
             })
-        
-        # For completed tasks, return the results
-        # In a real implementation, this would fetch actual comparison results
-        # For now, we'll return mock results
-        
-        # Get functions from both binaries for comparison
-        functions1 = Function.query.filter_by(binary_id=binary_id1).limit(50).all()
-        functions2 = Function.query.filter_by(binary_id=binary_id2).limit(50).all()
-        
-        # Generate differences based on functions
-        differences = []
-        total_differences = 0
-        instruction_differences = 0
-        data_differences = 0
-        function_differences = 0
-        
-        # Compare functions by name
-        function_names1 = {func.name: func for func in functions1 if func.name}
-        function_names2 = {func.name: func for func in functions2 if func.name}
-        
-        # Find functions in binary1 but not in binary2
-        for name, func in function_names1.items():
-            if name not in function_names2:
-                differences.append({
-                    'type': 'function',
-                    'address': func.address,
-                    'binary1_value': name,
-                    'binary2_value': 'N/A',
-                    'description': f'Function {name} exists only in first binary'
-                })
-                function_differences += 1
-                total_differences += 1
-        
-        # Find functions in binary2 but not in binary1
-        for name, func in function_names2.items():
-            if name not in function_names1:
-                differences.append({
-                    'type': 'function',
-                    'address': func.address,
-                    'binary1_value': 'N/A',
-                    'binary2_value': name,
-                    'description': f'Function {name} exists only in second binary'
-                })
-                function_differences += 1
-                total_differences += 1
-        
-        # Add some instruction differences for demonstration
-        if diff_type in ['instructions', 'all']:
-            # Get some instructions if available
-            instructions1 = Instruction.query.filter_by(binary_id=binary_id1).limit(10).all()
-            instructions2 = Instruction.query.filter_by(binary_id=binary_id2).limit(10).all()
-            
-            # If we have instructions, add some differences
-            if instructions1 and instructions2:
-                for i in range(min(5, len(instructions1), len(instructions2))):
-                    differences.append({
-                        'type': 'instruction',
-                        'address': instructions1[i].address if i < len(instructions1) else 'N/A',
-                        'binary1_value': instructions1[i].mnemonic if i < len(instructions1) else 'N/A',
-                        'binary2_value': instructions2[i].mnemonic if i < len(instructions2) else 'N/A',
-                        'description': 'Instruction difference'
-                    })
-                    instruction_differences += 1
-                    total_differences += 1
-            else:
-                # Add mock instruction differences
-                addresses = ['0x401000', '0x401020', '0x401040', '0x401060', '0x401080']
-                for i in range(5):
-                    differences.append({
-                        'type': 'instruction',
-                        'address': addresses[i],
-                        'binary1_value': f'mov eax, {i}',
-                        'binary2_value': f'mov eax, {i+1}',
-                        'description': 'Different immediate values'
-                    })
-                    instruction_differences += 1
-                    total_differences += 1
-        
-        # Add some data differences for demonstration
-        if diff_type in ['data', 'all']:
-            # Add mock data differences
-            addresses = ['0x601000', '0x601020', '0x601040']
-            for i in range(3):
-                differences.append({
-                    'type': 'data',
-                    'address': addresses[i],
-                    'binary1_value': f'0x{i:08x}',
-                    'binary2_value': f'0x{i+1:08x}',
-                    'description': 'Different data values'
-                })
-                data_differences += 1
-                total_differences += 1
-        
-        # For the test binaries, add specific differences
-        if binary1.original_filename == 'binary_compare_v1.exe' and binary2.original_filename == 'binary_compare_v2.exe':
-            # Add log_operation function difference
-            differences.append({
-                'type': 'function',
-                'address': '0x401500',
-                'binary1_value': 'N/A',
-                'binary2_value': 'log_operation',
-                'description': 'New function log_operation added in v2'
-            })
-            function_differences += 1
-            total_differences += 1
-            
-            # Add process_data implementation difference
-            differences.append({
-                'type': 'instruction',
-                'address': '0x401100',
-                'binary1_value': 'imul eax, 2',
-                'binary2_value': 'imul eax, 3',
-                'description': 'process_data multiplies by 2 in v1, by 3 in v2'
-            })
-            instruction_differences += 1
-            total_differences += 1
-            
-            # Add even/odd check difference
-            differences.append({
-                'type': 'instruction',
-                'address': '0x401200',
-                'binary1_value': 'N/A',
-                'binary2_value': 'test eax, 1\njz even_label',
-                'description': 'Additional even/odd check in analyze_result function in v2'
-            })
-            instruction_differences += 1
-            total_differences += 1
-            
-            # Add version string difference
-            differences.append({
-                'type': 'data',
-                'address': '0x602000',
-                'binary1_value': 'File Processing Tool v1.0',
-                'binary2_value': 'File Processing Tool v2.0',
-                'description': 'Version string changed from v1.0 to v2.0'
-            })
-            data_differences += 1
-            total_differences += 1
-        
-        # Calculate similarity score (higher means more similar)
-        total_functions = len(function_names1) + len(function_names2)
-        similarity_score = 1.0 - (total_differences / max(20, total_functions)) if total_functions > 0 else 0.5
-        
-        # Limit to reasonable number of differences for display
-        differences = differences[:20]
-        
+        # Fetch the real diff result
+        result = AnalysisResult.query.filter_by(task_id=task.id, analysis_type='binary_diff').first()
+        if not result:
+            return jsonify({'error': 'No diff result found for this task'}), 404
         return jsonify({
             'task_id': task.id,
-            'status': 'completed',
-            'binary_id1': binary_id1,
-            'binary_id2': binary_id2,
-            'diff_type': diff_type,
-            'results': {
-                'differences': differences,
-                'similarity_score': max(0.0, min(1.0, similarity_score)),
-                'summary': {
-                    'total_differences': total_differences,
-                    'instruction_differences': instruction_differences,
-                    'data_differences': data_differences,
-                    'function_differences': function_differences
-                }
-            }
+            'status': task.status,
+            'diff_result': result.results
         })
-        
     except Exception as e:
         logger.error(f"Error getting binary comparison results: {str(e)}")
         return jsonify({'error': str(e)}), 500
@@ -3731,4 +3659,98 @@ def update_binary_comparison_status(task_id):
         
     except Exception as e:
         logger.error(f"Error updating binary comparison status: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+# Helper to make any object JSON serializable
+def make_json_serializable(obj):
+    if isinstance(obj, dict):
+        return {k: make_json_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple, set)):
+        return [make_json_serializable(v) for v in obj]
+    else:
+        # Try to get __dict__ safely
+        try:
+            d = vars(obj)
+            return make_json_serializable(d)
+        except Exception:
+            try:
+                json.dumps(obj)
+                return obj
+            except Exception:
+                return str(obj)
+
+@api_bp.route('/analysis/diff/results', methods=['GET'])
+def list_binary_diff_results():
+    """List all past binary comparison (diff) results"""
+    try:
+        results = AnalysisResult.query.filter_by(analysis_type='binary_diff').order_by(AnalysisResult.created_at.desc()).all()
+        return jsonify({
+            'results': [
+                {
+                    'id': r.id,
+                    'binary_id': r.binary_id,
+                    'task_id': r.task_id,
+                    'created_at': r.created_at.isoformat() if r.created_at else None,
+                    'meta_data': r.meta_data,
+                    'results': r.results
+                }
+                for r in results
+            ]
+        })
+    except Exception as e:
+        logger.error(f"Error listing binary diff results: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/analysis/diff/results/<result_id>', methods=['DELETE'])
+def delete_binary_diff_result(result_id):
+    """Delete a specific binary comparison result"""
+    try:
+        result = AnalysisResult.query.filter_by(id=result_id, analysis_type='binary_diff').first()
+        if not result:
+            return jsonify({'error': 'Binary diff result not found'}), 404
+        
+        # Store info for logging
+        task_id = result.task_id
+        binary_id = result.binary_id
+        
+        # Delete the result
+        db.session.delete(result)
+        db.session.commit()
+        
+        logger.info(f"Deleted binary diff result {result_id} (task: {task_id}, binary: {binary_id})")
+        
+        return jsonify({
+            'message': 'Binary diff result deleted successfully',
+            'deleted_id': result_id
+        })
+        
+    except Exception as e:
+        logger.error(f"Error deleting binary diff result {result_id}: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+# Add static file route for Docs directory (for fallback content)
+@api_bp.route('/Docs/<path:filename>', methods=['GET'])
+def serve_docs_static(filename):
+    """Serve static files from the Docs directory"""
+    try:
+        # Sanitize the path to prevent directory traversal
+        filename = filename.replace('..', '').strip('/')
+        
+        # Build the full path to the Docs directory
+        docs_base = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'Docs')
+        full_path = os.path.join(docs_base, filename)
+        
+        # Check if file exists
+        if not os.path.exists(full_path):
+            return jsonify({'error': 'File not found'}), 404
+            
+        # Read and return the file content
+        with open(full_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            
+        return content, 200, {'Content-Type': 'text/plain; charset=utf-8'}
+        
+    except Exception as e:
+        logger.error(f"Error serving static docs file {filename}: {e}")
         return jsonify({'error': str(e)}), 500

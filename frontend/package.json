@@ -36,7 +36,7 @@
     "d3-zoom": "^3.0.0",
     "highlight.js": "^11.11.1",
     "lodash": "^4.17.21",
-    "mermaid": "^11.8.0",
+    "mermaid": "^11.9.0",
     "prismjs": "^1.29.0",
     "react": "^18.2.0",
     "react-chartjs-2": "^5.2.0",

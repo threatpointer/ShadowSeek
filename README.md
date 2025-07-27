@@ -294,7 +294,6 @@ We welcome contributions! Please see our contributing guidelines and code of con
 
 - **Documentation**: [memory-bank/](memory-bank/)
 - **Issues**: GitHub Issues
-- **Email**: dev@shadowseek.security
 
 ---
 

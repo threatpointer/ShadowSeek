@@ -253,11 +253,11 @@ alerts:
 4. **Escalate if Needed**: Contact appropriate support tier
 5. **Follow Up**: Monitor resolution and document outcome
 
-### **Contact Information**
-- **System Administrator**: admin@company.com
-- **Database Administrator**: dba@company.com
-- **Technical Support**: support@company.com
-- **Emergency Hotline**: +1-xxx-xxx-xxxx
+### **Support Resources**
+- **Documentation**: Comprehensive administration guides
+- **GitHub Repository**: Source code and issue tracking
+- **Community Forums**: Connect with other administrators
+- **Troubleshooting Guide**: Common issues and solutions
 
 ---
 

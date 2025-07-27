@@ -213,9 +213,9 @@ Production-grade platform suitable for security teams:
 ## 📞 **Support & Community**
 
 ### **Professional Support**
-- **Email**: [dev@shadowseek.security](mailto:dev@shadowseek.security)
 - **Team**: ShadowSeek Development Team
-- **Response Time**: 24-48 hours for technical issues
+- **GitHub Issues**: Report bugs and request features
+- **Documentation**: Comprehensive guides and API reference
 
 ### **Documentation & Resources**
 - **Complete API Documentation**: 50+ REST endpoints with examples

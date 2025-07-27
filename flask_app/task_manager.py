@@ -594,21 +594,24 @@ class TaskManager:
                     if stop_progress.wait(step_duration):
                         break  # Stop if analysis completed
                     
-                    # Update progress in database
+                    # Update progress in database with Flask application context
                     try:
                         elapsed = time.time() - start_time
                         if elapsed > step_duration * len(progress_steps):
                             break  # Process taking too long, stop fake progress
                         
                         logger.info(f"Progress update: {step_name} ({int(progress*100)}%)")
-                        comp_analysis = ComprehensiveAnalysis.query.filter_by(binary_id=binary_id).first()
-                        if comp_analysis and not comp_analysis.is_complete:
-                            comp_analysis.program_metadata = json.dumps({
-                                "status": step_name.lower().replace(" ", "_"),
-                                "progress": progress,
-                                "current_step": step_name
-                            })
-                            db.session.commit()
+                        
+                        # Use Flask application context for database access
+                        with self.app.app_context():
+                            comp_analysis = ComprehensiveAnalysis.query.filter_by(binary_id=binary_id).first()
+                            if comp_analysis and not comp_analysis.is_complete:
+                                comp_analysis.program_metadata = json.dumps({
+                                    "status": step_name.lower().replace(" ", "_"),
+                                    "progress": progress,
+                                    "current_step": step_name
+                                })
+                                db.session.commit()
                     except Exception as e:
                         logger.error(f"Error updating progress: {e}")
             

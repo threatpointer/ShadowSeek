@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { CssBaseline, AppBar, Toolbar, Typography, Button, Box } from '@mui/material';
 import { ToastContainer } from 'react-toastify';
@@ -16,6 +16,8 @@ import ShadowSeekVulnerabilityDashboard from './components/VulnerabilityDashboar
 import FuzzingDashboard from './components/FuzzingDashboard';
 import SystemManagement from './components/SystemManagement';
 import DocumentationViewer from './components/DocumentationViewer';
+import TaskStatusBar from './components/TaskStatusBar';
+import NotificationCenter from './components/NotificationCenter';
 
 // Theme configuration
 const theme = createTheme({
@@ -61,6 +63,15 @@ const theme = createTheme({
 });
 
 const App: React.FC = () => {
+  // Dynamically load test utility to avoid circular dependencies
+  React.useEffect(() => {
+    import('./utils/testTaskSync').then((module) => {
+      console.log('Test utility loaded successfully - use window.testTaskSync() to test backend sync');
+    }).catch((error) => {
+      console.warn('Failed to load test utility:', error);
+    });
+  }, []);
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -129,13 +140,14 @@ const App: React.FC = () => {
                   System
                 </Button>
               </Box>
-              <Typography variant="body2" sx={{ opacity: 0.7 }}>
+              <NotificationCenter />
+              <Typography variant="body2" sx={{ opacity: 0.7, ml: 2 }}>
                 v1.0.0
               </Typography>
             </Toolbar>
           </AppBar>
           
-          <Box component="main">
+          <Box component="main" sx={{ pb: 8 }}>
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/upload" element={<FileUpload />} />
@@ -153,6 +165,17 @@ const App: React.FC = () => {
           </Box>
         </Box>
         
+        {/* Persistent Task Status Bar */}
+        <TaskStatusBar 
+          onTaskComplete={(taskId, results) => {
+            console.log(`Task ${taskId} completed with results:`, results);
+          }}
+          onViewResults={(taskId) => {
+            // Could navigate to results or show in a modal
+            window.location.href = '/comparison';
+          }}
+        />
+        
         <ToastContainer
           position="bottom-right"
           autoClose={5000}
@@ -163,8 +186,18 @@ const App: React.FC = () => {
           pauseOnFocusLoss
           draggable
           pauseOnHover
-          theme="dark"
-        />
+                   theme="dark"
+         style={{ bottom: '80px' }} // Adjust for task status bar
+       />
+       
+       {/* Add CSS animations for pulsing notification */}
+       <style>{`
+         @keyframes pulse {
+           0% { opacity: 1; }
+           50% { opacity: 0.5; }
+           100% { opacity: 1; }
+         }
+       `}</style>
       </Router>
     </ThemeProvider>
   );

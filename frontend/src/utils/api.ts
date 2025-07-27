@@ -389,18 +389,26 @@ class ApiClient {
   async compareBinaries(
     binaryId1: string,
     binaryId2: string,
-    diffType: string = 'instructions'
+    diffType: string = 'instructions',
+    performanceMode: string = 'balanced'
   ): Promise<any> {
+    // Use 20-minute timeout for binary comparisons (longer than backend 15-min timeout)
     const response = await api.post('/analysis/diff', {
       binary_id1: binaryId1,
       binary_id2: binaryId2,
       diff_type: diffType,
+      performance_mode: performanceMode,
+    }, {
+      timeout: 1200000  // 20 minutes - longer than backend timeout
     });
     return response.data;
   }
 
   async getBinaryComparisonResults(taskId: string): Promise<any> {
-    const response = await api.get(`/analysis/diff/${taskId}`);
+    // Use 30-second timeout for status polling to avoid blocking UI
+    const response = await api.get(`/analysis/diff/${taskId}`, {
+      timeout: 30000  // 30 seconds for status checks
+    });
     return response.data;
   }
 
@@ -973,6 +981,20 @@ class ApiClient {
   async getFuzzingReadyBinaries(): Promise<{ fuzzing_ready_binaries: any[]; total_ready: number }> {
     const response = await api.get('/binaries/fuzzing-ready');
     return response.data;
+  }
+
+  async getPastBinaryDiffResults(): Promise<any[]> {
+    const response = await api.get('/analysis/diff/results');
+    return response.data.results;
+  }
+
+  async deleteBinaryDiffResult(resultId: string): Promise<void> {
+    await api.delete(`/analysis/diff/results/${resultId}`);
+  }
+
+  async get(endpoint: string): Promise<any> {
+    const response = await api.get(endpoint);
+    return response;
   }
 }
 

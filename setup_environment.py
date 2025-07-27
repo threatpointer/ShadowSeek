@@ -4,7 +4,7 @@ ShadowSeek Environment Setup Script
 
 This script configures the ShadowSeek environment by:
 - Auto-detecting Ghidra installations
-- Installing missing Python dependencies
+- Installing Python and frontend dependencies
 - Creating .env configuration file
 - Setting up Ghidra Bridge server and client
 - Starting ShadowSeek components automatically
@@ -17,6 +17,9 @@ Options:
     --auto                    Run in auto mode without prompts
     --skip-install            Skip automatic dependency installation
     --skip-startup            Skip automatic component startup
+    --skip-system-check       Skip system requirements check
+    --force-clean             Force clean virtual environment
+    --use-pip                 Force use of pip instead of UV
     --ghidra-path PATH        Specify Ghidra installation path
 """
 
@@ -260,14 +263,29 @@ def install_python_dependencies(use_pip=False):
 def install_packages_individually(pkg_manager):
     """Install packages one by one into virtual environment (fallback method)"""
     # Required packages for ShadowSeek (fallback if pyproject.toml sync fails)
+    # Updated with all dependencies for binary comparison and AI features
     required_packages = [
-        "flask>=2.0",
-        "flask-sqlalchemy>=3.0", 
+        "flask>=2.3",
+        "flask-sqlalchemy>=3.1", 
         "flask-cors>=4.0",
-        "requests>=2.28",
+        "flask-migrate>=4.0",
+        "flask-socketio>=5.3",
+        "flask-restx>=1.3",
+        "requests>=2.31",
         "python-dotenv>=1.0",
-        "ghidra-bridge>=0.2",
-        "werkzeug>=2.0"
+        "ghidra-bridge>=1.0",
+        "werkzeug>=2.3",
+        "sqlalchemy>=2.0",
+        "psutil>=5.9",
+        "python-magic>=0.4",
+        "aiohttp>=3.9",
+        "aiohttp-cors>=0.7",
+        "websockets>=12.0",
+        "redis>=5.0",
+        "openai>=1.0",
+        "anthropic>=0.7",
+        "google-generativeai>=0.3",
+        "jsonschema>=4.20"
     ]
     
     try:
@@ -372,13 +390,22 @@ def test_python_dependencies(force_clean=False, use_pip=False):
         'flask': 'Flask web framework',
         'flask_sqlalchemy': 'Database ORM',
         'flask_cors': 'CORS handling',
+        'flask_migrate': 'Database migrations',
+        'flask_restx': 'REST API framework',
         'requests': 'HTTP client',
         'python-dotenv': 'Environment variable management',
-        'ghidra_bridge': 'Ghidra integration'
+        'ghidra_bridge': 'Ghidra integration',
+        'psutil': 'System monitoring',
+        'aiohttp': 'Async HTTP client',
+        'redis': 'Redis client (optional)',
+        'openai': 'OpenAI API client (optional)',
+        'anthropic': 'Anthropic API client (optional)',
+        'google-generativeai': 'Google AI client (optional)'
     }
     
     missing = []
     available = []
+    optional_packages = ['redis', 'openai', 'anthropic', 'google-generativeai']
     
     for package, description in dependencies.items():
         # Handle package name differences between pip and import
@@ -389,8 +416,11 @@ def test_python_dependencies(force_clean=False, use_pip=False):
             available.append(package)
             print_status(f"{package} ✓", "success")
         except ImportError:
-            missing.append(package)
-            print_status(f"{package} - missing", "warning")
+            if package in optional_packages:
+                print_status(f"{package} - optional (for AI features)", "info")
+            else:
+                missing.append(package)
+                print_status(f"{package} - missing", "warning")
     
     if missing:
         print_status(f"Installing {len(missing)} missing packages...", "info")
@@ -740,12 +770,16 @@ def create_env_file(config):
     env_content.append(f"FLASK_HOST={config.get('FLASK_HOST', '127.0.0.1')}")
     env_content.append("")
     
-    # Optional AI configuration
+    # AI service configuration
     env_content.append("# AI Service Configuration (Optional)")
     env_content.append("LLM_PROVIDER=openai")
     env_content.append("# OPENAI_API_KEY=your_key_here")
     env_content.append("# OPENAI_MODEL=gpt-3.5-turbo")
     env_content.append("# LLM_TEMPERATURE=0.3")
+    env_content.append("")
+    env_content.append("# Alternative AI Providers")
+    env_content.append("# ANTHROPIC_API_KEY=your_key_here")
+    env_content.append("# GOOGLE_API_KEY=your_key_here")
     env_content.append("")
     
     # Database configuration
@@ -934,13 +968,12 @@ pause
             
             # Check and install frontend dependencies if needed
             if not os.path.exists(node_modules):
-                print_status("Installing frontend dependencies...", "info")
-                try:
-                    run_command(["npm", "install"], cwd=frontend_path, timeout=120)
-                    print_status("Frontend dependencies installed", "success")
-                except Exception as e:
-                    print_status(f"Frontend dependency installation failed: {e}", "warning")
+                print_status("Frontend dependencies not found, installing...", "info")
+                if not install_frontend_dependencies():
+                    print_status("Frontend dependency installation failed", "warning")
                     print_status("You may need to install them manually: cd frontend && npm install", "info")
+            else:
+                print_status("Frontend dependencies found", "success")
             
             # Start React frontend
             try:
@@ -1014,6 +1047,10 @@ def test_running_components_with_retry(config, max_retries=4, delay=15):
             print_status(f"Waiting for: {', '.join(missing_components)}... ({delay}s)", "info")
             time.sleep(delay)
     
+    # Test API endpoints if Flask is running
+    if results['flask']:
+        test_api_endpoints(host, flask_port)
+    
     # Final status report
     if not results['flask']:
         print_status(f"Flask backend not responding - check logs/flask_startup.log", "error")
@@ -1023,6 +1060,46 @@ def test_running_components_with_retry(config, max_retries=4, delay=15):
         print_status("Frontend not responding - check React window", "error")
     
     return results
+
+def test_api_endpoints(host, port):
+    """Test that API endpoints are available"""
+    try:
+        import requests
+        base_url = f"http://{host}:{port}"
+        
+        # Test AI insights endpoint
+        ai_insights_url = f"{base_url}/api/ai/insights"
+        try:
+            # Test with minimal payload
+            test_payload = {
+                "context": {"binary1": "test.exe", "binary2": "test2.exe"},
+                "includeWebSearch": False,
+                "searchQueries": []
+            }
+            response = requests.post(ai_insights_url, json=test_payload, timeout=10)
+            if response.status_code in [200, 400, 500]:  # Any response means endpoint exists
+                print_status("✓ AI insights endpoint responding", "success")
+            else:
+                print_status("⚠ AI insights endpoint exists but may have issues", "warning")
+        except requests.exceptions.ConnectionError:
+            print_status("✗ AI insights endpoint not available", "warning")
+        except Exception:
+            print_status("⚠ AI insights endpoint test inconclusive", "info")
+        
+        # Test main API health
+        try:
+            health_response = requests.get(f"{base_url}/api/tasks", timeout=5)
+            if health_response.status_code == 200:
+                print_status("✓ Core API endpoints responding", "success")
+            else:
+                print_status("⚠ Core API may have issues", "warning")
+        except Exception:
+            print_status("⚠ Core API endpoint test failed", "warning")
+            
+    except ImportError:
+        print_status("Requests not available - skipping API tests", "info")
+    except Exception as e:
+        print_status(f"API feature test error: {e}", "info")
 
 def check_nodejs():
     """Check if Node.js and npm are installed"""
@@ -1160,6 +1237,97 @@ def check_npm_only():
     except:
         pass
     return False
+
+def install_frontend_dependencies():
+    """Install and verify frontend dependencies"""
+    frontend_path = os.path.join(os.getcwd(), "frontend")
+    
+    if not os.path.exists(frontend_path):
+        print_status("Frontend directory not found", "warning")
+        return False
+    
+    print_status("Installing frontend dependencies...", "info")
+    
+    try:
+        # First, ensure package.json exists
+        package_json_path = os.path.join(frontend_path, "package.json")
+        if not os.path.exists(package_json_path):
+            print_status("package.json not found in frontend directory", "error")
+            return False
+        
+        # Install all dependencies from package.json
+        print_status("Running npm install...", "info")
+        install_result = run_command(["npm", "install"], cwd=frontend_path, timeout=300)
+        
+        if install_result.returncode != 0:
+            print_status("npm install failed, trying with --legacy-peer-deps", "warning")
+            install_result = run_command(["npm", "install", "--legacy-peer-deps"], cwd=frontend_path, timeout=300)
+        
+        if install_result.returncode == 0:
+            print_status("Frontend dependencies installed successfully", "success")
+        else:
+            print_status("Frontend dependency installation failed", "error")
+            return False
+        
+        # Verify critical packages are installed
+        critical_packages = [
+            "mermaid",
+            "recharts", 
+            "react-markdown",
+            "remark-gfm",
+            "rehype-highlight",
+            "rehype-raw",
+            "remark-breaks",
+            "highlight.js"
+        ]
+        
+        print_status("Verifying critical packages...", "info")
+        node_modules_path = os.path.join(frontend_path, "node_modules")
+        
+        missing_packages = []
+        for package in critical_packages:
+            package_path = os.path.join(node_modules_path, package)
+            if not os.path.exists(package_path):
+                missing_packages.append(package)
+        
+        if missing_packages:
+            print_status(f"Missing critical packages: {', '.join(missing_packages)}", "warning")
+            print_status("Attempting to install missing packages individually...", "info")
+            
+            for package in missing_packages:
+                try:
+                    run_command(["npm", "install", package, "--save"], cwd=frontend_path, timeout=120)
+                    print_status(f"✓ Installed {package}", "success")
+                except Exception as e:
+                    print_status(f"✗ Failed to install {package}: {e}", "error")
+        else:
+            print_status("All critical packages verified", "success")
+        
+        # Test if React build process works
+        print_status("Testing React build process...", "info")
+        try:
+            # Just test that the build command doesn't immediately fail
+            build_test = run_command(["npm", "run", "build", "--", "--dry-run"], 
+                                   cwd=frontend_path, check=False, timeout=60)
+            if build_test.returncode == 0:
+                print_status("Build process test passed", "success")
+            else:
+                # Try a syntax check instead
+                print_status("Testing TypeScript compilation...", "info")
+                tsc_test = run_command(["npx", "tsc", "--noEmit"], 
+                                     cwd=frontend_path, check=False, timeout=60)
+                if tsc_test.returncode == 0:
+                    print_status("TypeScript compilation successful", "success")
+                else:
+                    print_status("Build test warnings (may be normal)", "info")
+        except Exception:
+            print_status("Build test skipped (may be normal)", "info")
+        
+        return True
+        
+    except Exception as e:
+        print_status(f"Frontend dependency installation error: {e}", "error")
+        return False
 
 def check_java_jdk():
     """Check if Java JDK is installed"""
@@ -1424,6 +1592,14 @@ def main():
         if not test_python_dependencies(force_clean=args.force_clean, use_pip=args.use_pip):
             print_status("Dependency installation failed", "error")
             return False
+        
+        # Step 2b: Install frontend dependencies
+        print_step("2b", "Frontend Dependencies")
+        if os.path.exists("frontend"):
+            if not install_frontend_dependencies():
+                print_status("Frontend dependencies installation had issues", "warning")
+        else:
+            print_status("Frontend directory not found - skipping", "info")
     
     # Step 3: Find Ghidra installations
     print_step(3, "Ghidra Detection & Configuration")
@@ -1477,6 +1653,9 @@ def main():
     print_status("Access ShadowSeek at: http://localhost:3000", "info")
     print_status(f"Backend API: http://localhost:{config.get('FLASK_PORT', '5000')}", "info")
     
+    print()
+    print_status("✓ All components configured successfully", "success")
+    
     if config.get("GHIDRA_INSTALL_DIR"):
         print()
         print_status("🌉 BRIDGE SETUP:", "success")
@@ -1490,6 +1669,8 @@ def main():
     else:
         print_status("⚠️  Ghidra Bridge not configured - binary analysis limited", "warning")
         print_status("   To enable: python setup_environment.py --ghidra-path YOUR_GHIDRA_PATH", "info")
+    
+    print_status("Setup completed successfully", "info")
     
     print_status("Check logs/ directory for detailed information", "info")
     

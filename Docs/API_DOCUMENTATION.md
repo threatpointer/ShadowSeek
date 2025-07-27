@@ -4,7 +4,7 @@
 
 ShadowSeek provides a comprehensive REST API for AI-powered binary security analysis. This API enables automated binary analysis, vulnerability detection, AI-enhanced explanations, and fuzzing harness generation.
 
-**Current Version**: 2.0.0  
+**Current Version**: 2.1.0  
 **Base URL**: `http://localhost:5000/api`  
 **Interactive Documentation**: `http://localhost:5000/api/docs/`
 
@@ -43,6 +43,14 @@ curl -X POST "http://localhost:5000/api/binaries" \
      -F "file=@your_binary.exe"
 ```
 
+### **Compare Two Binaries**
+```bash
+# Upload second binary first, then compare
+curl -X POST "http://localhost:5000/api/analysis/diff" \
+     -H "Content-Type: application/json" \
+     -d '{"binary_id1":"uuid1","binary_id2":"uuid2","performance_mode":"balanced"}'
+```
+
 ---
 
 ## 📊 **API Architecture**
@@ -53,12 +61,21 @@ graph TB
     B --> C[Task Manager]
     B --> D[AI Services]
     B --> E[Security Analyzer]
+    B --> L[Binary Comparison Engine]
+    B --> M[Web Search Service]
     
     C --> F[Ghidra Bridge :4768]
     F --> G[Ghidra Analysis]
     
+    L --> N[ghidriff CLI]
+    N --> G
+    
     D --> H[OpenAI GPT-4]
     D --> I[Anthropic Claude]
+    D --> O[Google Gemini]
+    
+    M --> P[DuckDuckGo API]
+    M --> Q[CVE Databases]
     
     B --> J[SQLite Database]
     B --> K[File Storage]
@@ -66,7 +83,209 @@ graph TB
     style A fill:#e3f2fd
     style B fill:#f3e5f5
     style J fill:#fff3e0
+    style L fill:#e8f5e8
+    style M fill:#fce4ec
 ```
+
+---
+
+## 🔍 **Binary Differential Analysis Engine**
+
+### **Acknowledgments & Credits**
+
+ShadowSeek's binary comparison capabilities are powered by **[ghidriff](https://github.com/clearbluejar/ghidriff)**, an exceptional open-source binary diffing engine created by **[@clearbluejar](https://clearbluejar.github.io/)** ([@clearbluejar on X/Twitter](https://x.com/clearbluejar)).
+
+**ghidriff** is a powerful command-line binary diffing engine built on top of **Ghidra**, the NSA's flagship software reverse engineering framework. We extend our sincere gratitude to the original authors for their outstanding work and contribution to the reverse engineering community.
+
+**Key Technologies:**
+- **ghidriff**: Binary diffing engine (BSD 3-Clause License)
+- **Ghidra**: NSA's Software Reverse Engineering Framework
+- **Original Repository**: [github.com/clearbluejar/ghidriff](https://github.com/clearbluejar/ghidriff)
+- **Documentation**: [clearbluejar.github.io](https://clearbluejar.github.io/)
+
+### **System Architecture**
+
+ShadowSeek integrates ghidriff through a sophisticated wrapper architecture that provides enterprise-grade features while maintaining the core functionality of the original tool:
+
+```mermaid
+graph TB
+    A[ShadowSeek REST API] --> B[Binary Comparison Controller]
+    B --> C[ghidriff Wrapper Service]
+    C --> D[Performance Mode Manager]
+    C --> E[Task Management System]
+    C --> F[Database Integration Layer]
+    
+    D --> G[ghidriff CLI Process]
+    G --> H[Ghidra Analysis Engine]
+    H --> I[Binary Analysis Pipeline]
+    
+    I --> J[Simple Diff]
+    I --> K[Version Tracking Diff] 
+    I --> L[Structural Graph Diff]
+    
+    G --> M[Results Parser]
+    M --> N[Markdown Report]
+    M --> O[JSON Metadata]
+    M --> P[Mermaid Diagrams]
+    
+    F --> Q[SQLite Database]
+    E --> R[Background Task Queue]
+    
+    style A fill:#e3f2fd
+    style G fill:#fff3e0
+    style H fill:#f3e5f5
+    style Q fill:#e8f5e8
+```
+
+### **Technical Implementation Details**
+
+#### **Core Integration Components**
+
+1. **ghidriff Wrapper Service** (`analysis_scripts/ghidriff_simple_wrapper.py`)
+   - **Purpose**: Bridges ShadowSeek's REST API with ghidriff's command-line interface
+   - **Features**: Process management, timeout handling, result parsing, database integration
+   - **Performance Optimization**: Dynamic JVM tuning, memory management, multi-threading support
+
+2. **Command Execution Engine**
+   ```python
+   # Example ghidriff command execution
+   ghidriff_cmd = [
+       "python", "-m", "ghidriff", 
+       binary1_path, binary2_path,
+       "--engine", diff_type,
+       "--output-dir", results_dir,
+       "--project-location", project_dir,
+       "--log-level", "INFO"
+   ]
+   ```
+
+3. **Performance Mode Configuration**
+   - **Speed Mode**: Optimized for quick comparisons with reduced analysis depth
+   - **Balanced Mode**: Standard analysis with reasonable performance/accuracy trade-off  
+   - **Accuracy Mode**: Deep analysis with maximum precision and detail
+
+#### **Supported Diff Types**
+
+| Diff Type | Description | ghidriff Engine | Use Case |
+|-----------|-------------|-----------------|----------|
+| **Simple** | Basic function-level comparison | `SimpleDiff` | Quick version comparisons |
+| **Version Tracking** | Advanced version tracking analysis | `VersionTrackingDiff` | Detailed change tracking |
+| **Structural Graph** | Graph-based structural analysis | `StructuralGraphDiff` | Architecture comparisons |
+
+#### **JVM & Memory Optimization**
+
+Our implementation includes intelligent JVM tuning for optimal performance:
+
+```python
+# Dynamic JVM argument generation
+jvm_args = [
+    f"-Xmx{max_memory}g",      # Maximum heap size
+    f"-Xms{initial_memory}g",   # Initial heap size  
+    "-XX:+UseG1GC",            # G1 Garbage Collector
+    "-XX:MaxGCPauseMillis=200", # GC pause time limit
+    "-Dghidra.analysis.timeout=1800"  # Analysis timeout
+]
+```
+
+**Memory allocation strategy:**
+- **Speed Mode**: 4GB heap, simplified analysis
+- **Balanced Mode**: 6GB heap, standard features
+- **Accuracy Mode**: 8GB heap, comprehensive analysis
+
+#### **Result Processing Pipeline**
+
+1. **Raw Output Collection**
+   - Markdown reports (`.ghidriff.md`)
+   - JSON metadata files
+   - Ghidra project artifacts
+   - Analysis logs and statistics
+
+2. **Content Parsing & Enhancement**
+   - Markdown content extraction and validation
+   - Mermaid diagram detection and rendering
+   - Function statistics calculation
+   - Performance metrics aggregation
+
+3. **Database Integration**
+   - Automatic result persistence
+   - Metadata indexing for search
+   - Historical comparison tracking
+   - Task status management
+
+#### **Error Handling & Resilience**
+
+- **Timeout Management**: Configurable timeouts per performance mode
+- **Process Monitoring**: Real-time process health checking
+- **Graceful Degradation**: Partial results on analysis failures
+- **Resource Cleanup**: Automatic cleanup of temporary files and processes
+
+#### **Security & Isolation**
+
+- **Process Sandboxing**: ghidriff runs in isolated subprocess
+- **Resource Limits**: Memory and CPU usage constraints
+- **File System Security**: Controlled access to analysis directories
+- **Input Validation**: Binary file validation before analysis
+
+### **API Integration Points**
+
+#### **Primary Endpoints**
+- `POST /api/analysis/diff` - Initiate binary comparison
+- `GET /api/analysis/diff/{task_id}` - Monitor comparison progress
+- `GET /api/analysis/results` - List historical comparisons
+- `DELETE /api/analysis/results/{result_id}` - Clean up old results
+
+#### **Performance Monitoring**
+- Real-time progress tracking via task management system
+- Execution time metrics and performance analytics
+- Resource utilization monitoring (CPU, memory, disk I/O)
+- Success/failure rate statistics
+
+### **Usage Patterns & Best Practices**
+
+#### **Recommended Workflows**
+
+1. **Quick Version Comparison**
+   ```bash
+   # Fast comparison for similar binaries
+   curl -X POST "/api/analysis/diff" \
+        -d '{"binary_id1":"uuid1","binary_id2":"uuid2","performance_mode":"speed"}'
+   ```
+
+2. **Detailed Analysis**
+   ```bash
+   # Comprehensive analysis with structural graphs
+   curl -X POST "/api/analysis/diff" \
+        -d '{"diff_type":"structural_graph","performance_mode":"accuracy"}'
+   ```
+
+3. **Batch Processing**
+   - Use "balanced" mode for multiple comparisons
+   - Monitor system resources during bulk operations
+   - Implement queue management for large-scale analysis
+
+#### **Performance Optimization Tips**
+
+- **Binary Size**: Larger binaries (>100MB) benefit from "speed" mode
+- **Analysis Depth**: Use "simple" diff type for basic comparisons
+- **System Resources**: Ensure adequate RAM (8GB+ recommended)
+- **Concurrent Tasks**: Limit simultaneous comparisons based on available memory
+
+### **Integration Benefits**
+
+**Enhanced Features Over Standalone ghidriff:**
+- ✅ **Web-based Interface**: User-friendly React frontend
+- ✅ **REST API Access**: Programmatic integration capabilities  
+- ✅ **Persistent Storage**: Database-backed result management
+- ✅ **Task Management**: Background processing with progress tracking
+- ✅ **Performance Modes**: Configurable analysis depth and speed
+- ✅ **AI Integration**: Enhanced result interpretation with LLM analysis
+- ✅ **Multi-format Support**: Enhanced rendering of reports and diagrams
+
+**Maintained ghidriff Advantages:**
+- ✅ **Ghidra Integration**: Full access to Ghidra's analysis capabilities
+- ✅ **Multiple Diff Engines**: All three ghidriff diff types supported
+- ✅ **Comprehensive Reports**: Rich markdown reports with diagrams
+- ✅ **Open Source Foundation**: Built on proven, community-driven tools
 
 ---
 
@@ -96,7 +315,7 @@ GET /api/system/status
     "security_analyzer": "ready"
   },
   "server_time": "2024-01-15T10:30:00Z",
-  "version": "2.0.0"
+  "version": "2.1.0"
 }
 ```
 
@@ -441,6 +660,217 @@ POST /api/binaries/{binary_id}/enhanced-security-analysis
 
 ---
 
+## 🔄 **Binary Comparison**
+
+### **Compare Two Binaries**
+```http
+POST /api/analysis/diff
+```
+
+**Request Body:**
+```json
+{
+  "binary_id1": "uuid-of-first-binary",
+  "binary_id2": "uuid-of-second-binary", 
+  "diff_type": "simple",
+  "performance_mode": "balanced"
+}
+```
+
+**Parameters:**
+- `binary_id1` (required): UUID of the first binary to compare
+- `binary_id2` (required): UUID of the second binary to compare  
+- `diff_type` (optional): Analysis type - `"simple"`, `"version_tracking"`, or `"structural_graph"` (default: `"simple"`)
+- `performance_mode` (optional): Performance mode - `"speed"`, `"balanced"`, or `"accuracy"` (default: `"balanced"`)
+
+**Response:**
+```json
+{
+  "success": true,
+  "task_id": "comparison-task-uuid",
+  "binary_id1": "uuid-of-first-binary",
+  "binary_id2": "uuid-of-second-binary",
+  "diff_type": "simple",
+  "performance_mode": "balanced",
+  "status": "running",
+  "message": "Binary comparison started successfully"
+}
+```
+
+### **Get Comparison Results**
+```http
+GET /api/analysis/diff/{task_id}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "task_id": "comparison-task-uuid",
+  "status": "completed",
+  "binary_names": {
+    "binary1": "program_v1.exe",
+    "binary2": "program_v2.exe"
+  },
+  "summary": {
+    "functions_added": 12,
+    "functions_deleted": 5,
+    "functions_modified": 8,
+    "match_percentage": 87.3
+  },
+  "markdown_report": "# Binary Comparison Report...",
+  "execution_time": 145.7,
+  "completed_at": "2024-01-15T10:30:00Z"
+}
+```
+
+### **List Past Comparison Results**
+```http
+GET /api/analysis/results
+```
+
+**Query Parameters:**
+- `limit` (optional): Maximum number of results (default: 50)
+- `offset` (optional): Pagination offset (default: 0)
+
+**Response:**
+```json
+{
+  "results": [
+    {
+      "id": "result-uuid",
+      "task_id": "comparison-task-uuid",
+      "binary_names": {
+        "binary1": "program_v1.exe", 
+        "binary2": "program_v2.exe"
+      },
+      "success": true,
+      "functions_added": 12,
+      "functions_deleted": 5,
+      "functions_modified": 8,
+      "created_at": "2024-01-15T10:30:00Z"
+    }
+  ],
+  "total": 25,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+### **Delete Comparison Result**
+```http
+DELETE /api/analysis/results/{result_id}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Analysis result deleted successfully"
+}
+```
+
+---
+
+## 🤖 **AI-Powered Insights**
+
+### **Get AI Insights for Binary Comparison**
+```http
+POST /api/ai/insights
+```
+
+**Request Body:**
+```json
+{
+  "context": {
+    "binary1": "program_v1.exe",
+    "binary2": "program_v2.exe",
+    "functionStats": {
+      "total_funcs_len": 245,
+      "total_changes": 25
+    },
+    "addedFunctions": 12,
+    "deletedFunctions": 5,
+    "modifiedFunctions": 8
+  },
+  "includeWebSearch": true,
+  "searchQueries": [
+    "program_v1.exe security vulnerabilities CVE",
+    "program_v2.exe security vulnerabilities CVE", 
+    "program_v1.exe program_v2.exe changelog release notes"
+  ]
+}
+```
+
+**Response:**
+```json
+{
+  "timestamp": "2024-01-15T10:30:00Z",
+  "binaryNames": {
+    "binary1": "program_v1.exe",
+    "binary2": "program_v2.exe"
+  },
+  "securityFindings": [
+    {
+      "title": "CVE-2024-1234 - Buffer Overflow in program_v1.exe",
+      "description": "Critical buffer overflow vulnerability found in version 1.0",
+      "severity": "high",
+      "cveId": "CVE-2024-1234",
+      "source": "https://nvd.nist.gov/vuln/detail/CVE-2024-1234"
+    }
+  ],
+  "versionAnalysis": {
+    "summary": "The transition shows expansion with 12 new functions added and 5 removed, suggesting feature enhancements.",
+    "releaseNotes": [
+      "Modified 8 existing functions for improvements or bug fixes",
+      "Added 12 new functions for enhanced functionality", 
+      "Removed 5 deprecated or unnecessary functions"
+    ]
+  },
+  "researchLinks": [
+    {
+      "title": "Security Analysis of Program Updates",
+      "description": "Research paper analyzing security improvements in program updates",
+      "url": "https://example.com/research-paper"
+    }
+  ],
+  "recommendations": [
+    "🧪 TESTING FOCUS: With 12 new functions, conduct comprehensive integration testing",
+    "🔄 REGRESSION TESTING: 8 functions modified. Perform thorough regression testing",
+    "📚 DOCUMENTATION: Update user documentation to reflect functional changes"
+  ]
+}
+```
+
+---
+
+## 📥 **Data Management**
+
+### **Import Existing Results**
+```http
+POST /api/import-results
+```
+
+**Description:** Import previously generated analysis results from the filesystem into the database.
+
+**Response:**
+```json
+{
+  "success": true,
+  "imported_count": 15,
+  "failed_count": 2,
+  "total_processed": 17,
+  "results": [
+    "✅ Imported: task-uuid-1",
+    "✅ Imported: task-uuid-2", 
+    "❌ Failed: task-uuid-3 - Invalid JSON format",
+    "⚠️  Skipped: task-uuid-4 (already exists)"
+  ]
+}
+```
+
+---
+
 ## 🎯 **Fuzzing Harness Generation**
 
 ### **Generate Fuzzing Harness**
@@ -685,12 +1115,17 @@ import time
 
 base_url = "http://localhost:5000/api"
 
-# 1. Upload binary
-with open("target.exe", "rb") as f:
-    response = requests.post(f"{base_url}/binaries", files={"file": f})
-    binary_id = response.json()["binary"]["id"]
+# 1. Upload binaries
+with open("target_v1.exe", "rb") as f:
+    response1 = requests.post(f"{base_url}/binaries", files={"file": f})
+    binary_id1 = response1.json()["binary"]["id"]
+
+with open("target_v2.exe", "rb") as f:
+    response2 = requests.post(f"{base_url}/binaries", files={"file": f})
+    binary_id2 = response2.json()["binary"]["id"]
 
 # 2. Wait for analysis completion
+for binary_id in [binary_id1, binary_id2]:
 while True:
     response = requests.get(f"{base_url}/binaries/{binary_id}")
     status = response.json()["binary"]["analysis_status"]
@@ -698,18 +1133,43 @@ while True:
         break
     time.sleep(10)
 
-# 3. Run AI analysis
-requests.post(f"{base_url}/binaries/{binary_id}/ai-explain-all")
+# 3. Compare binaries
+compare_response = requests.post(f"{base_url}/analysis/diff", json={
+    "binary_id1": binary_id1,
+    "binary_id2": binary_id2,
+    "performance_mode": "balanced"
+})
+task_id = compare_response.json()["task_id"]
 
-# 4. Perform security analysis  
+# 4. Wait for comparison completion
+while True:
+    result = requests.get(f"{base_url}/analysis/diff/{task_id}")
+    if result.json()["status"] == "completed":
+        comparison_data = result.json()
+        break
+    time.sleep(15)
+
+# 5. Get AI insights
+ai_insights = requests.post(f"{base_url}/ai/insights", json={
+    "context": {
+        "binary1": "target_v1.exe",
+        "binary2": "target_v2.exe",
+        "addedFunctions": comparison_data["summary"]["functions_added"]
+    },
+    "includeWebSearch": True,
+    "searchQueries": ["target_v1.exe security CVE", "target_v2.exe vulnerabilities"]
+})
+
+# 6. Perform security analysis on both binaries  
+for binary_id in [binary_id1, binary_id2]:
 security_response = requests.post(f"{base_url}/binaries/{binary_id}/security-analysis")
 findings = security_response.json()["findings"]
 
-# 5. Generate fuzzing harness
-harness_response = requests.post(f"{base_url}/binaries/{binary_id}/generate-fuzzing-harness")
+# 7. Generate fuzzing harness
+harness_response = requests.post(f"{base_url}/binaries/{binary_id1}/generate-fuzzing-harness")
 harness_id = harness_response.json()["harness_id"]
 
-# 6. Download harness
+# 8. Download harness
 harness_zip = requests.get(f"{base_url}/fuzzing-harnesses/{harness_id}/download")
 with open("fuzzing_harness.zip", "wb") as f:
     f.write(harness_zip.content)
@@ -763,13 +1223,15 @@ GET /api/health
 ```json
 {
   "status": "healthy",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "uptime": 86400,
   "components": {
     "database": "healthy",
     "ghidra_bridge": "healthy", 
     "ai_services": "healthy",
-    "file_system": "healthy"
+    "file_system": "healthy",
+    "binary_comparison": "healthy",
+    "web_search": "healthy"
   }
 }
 ```
@@ -801,4 +1263,4 @@ GET /api/metrics
 
 *ShadowSeek API Documentation - Automate AI-Powered Binary Security Analysis*
 
-**Version**: 2.0.0 | **Status**: ✅ Production Ready | **Support**: Check [troubleshooting guide](../user-docs/administration/troubleshooting.md) 
+**Version**: 2.1.0 | **Status**: ✅ Production Ready | **Support**: Check [troubleshooting guide](../user-docs/administration/troubleshooting.md) 

@@ -64,6 +64,14 @@ def create_app(test_config=None):
     # Register blueprints
     app.register_blueprint(api_bp, url_prefix='/api')
     
+    # Register import endpoint
+    from flask_app.import_endpoint import import_bp
+    app.register_blueprint(import_bp, url_prefix='/api')
+    
+    # Register AI insights endpoint
+    from flask_app.ai_insights_endpoint import ai_insights_bp
+    app.register_blueprint(ai_insights_bp)
+    
     # Setup Swagger API documentation
     try:
         from flask_app.swagger_docs import create_swagger_blueprint

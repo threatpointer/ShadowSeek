@@ -235,8 +235,20 @@ const DocumentationViewer: React.FC = () => {
         { title: 'Binary Management', path: '/docs/api-reference/binary-management', description: 'Binary upload and management APIs' },
         { title: 'Function Analysis', path: '/docs/api-reference/function-analysis', description: 'Function decompilation APIs' },
         { title: 'Security Analysis', path: '/docs/api-reference/security-analysis', description: 'Security scanning APIs' },
+        { title: 'Binary Comparison', path: '/docs/api-reference/binary-comparison', description: 'Binary diff and comparison APIs' },
+        { title: 'AI-Powered Insights', path: '/docs/api-reference/ai-insights', description: 'AI analysis and web search APIs' },
+        { title: 'Data Management', path: '/docs/api-reference/data-management', description: 'Import and export APIs' },
         { title: 'Fuzzing APIs', path: '/docs/api-reference/fuzzing-apis', description: 'Fuzzing harness generation APIs' },
         { title: 'Task Management', path: '/docs/api-reference/task-management', description: 'Analysis task APIs' }
+      ]
+    },
+    {
+      title: 'Binary Comparison',
+      icon: <Code />,
+      items: [
+        { title: 'Binary Differential Analysis Engine', path: '/docs/binary-comparison/differential-analysis', description: 'ghidriff integration architecture and implementation' },
+        { title: 'Performance Modes', path: '/docs/binary-comparison/performance-modes', description: 'Speed, balanced, and accuracy modes' },
+        { title: 'Usage Examples', path: '/docs/binary-comparison/usage-examples', description: 'Binary comparison workflows and best practices' }
       ]
     },
     {
@@ -322,6 +334,141 @@ const DocumentationViewer: React.FC = () => {
 
   // Fallback content for when API is not available
   const getFallbackContent = async (filePath: string): Promise<string> => {
+    // Handle new API reference sections
+    if (filePath.includes('api-reference/binary-comparison')) {
+      try {
+        const response = await fetch('http://localhost:5000/Docs/api-reference-binary-comparison.md');
+        return await response.text();
+      } catch (error) {
+        return 'Binary Comparison API documentation is being loaded...';
+      }
+    }
+    
+    if (filePath.includes('api-reference/ai-insights')) {
+      try {
+        const response = await fetch('http://localhost:5000/Docs/api-reference-ai-insights.md');
+        return await response.text();
+      } catch (error) {
+        return 'AI-Powered Insights API documentation is being loaded...';
+      }
+    }
+    
+    if (filePath.includes('api-reference/data-management')) {
+      try {
+        const response = await fetch('http://localhost:5000/Docs/api-reference-data-management.md');
+        return await response.text();
+      } catch (error) {
+        return 'Data Management API documentation is being loaded...';
+      }
+    }
+    
+    // Handle binary comparison documentation
+    if (filePath.includes('binary-comparison/differential-analysis')) {
+      try {
+        const response = await fetch('http://localhost:5000/Docs/API_DOCUMENTATION.md');
+        const fullContent = await response.text();
+        // Extract the Binary Differential Analysis Engine section
+        const sectionStart = fullContent.indexOf('## 🔍 **Binary Differential Analysis Engine**');
+        const nextSectionStart = fullContent.indexOf('## 🔧 **System Management**');
+        if (sectionStart !== -1 && nextSectionStart !== -1) {
+          return fullContent.substring(sectionStart, nextSectionStart);
+        }
+        return fullContent;
+      } catch (error) {
+        return 'Binary Differential Analysis Engine documentation is being loaded...';
+      }
+    }
+    
+    if (filePath.includes('binary-comparison/performance-modes')) {
+      return `# Performance Modes
+
+ShadowSeek's binary comparison engine offers three performance modes to balance speed and analysis depth:
+
+## Speed Mode
+- **Target**: Quick comparisons for similar binaries
+- **Memory**: 4GB heap allocation
+- **Analysis Depth**: Reduced for faster processing
+- **Best For**: Version comparisons, CI/CD pipelines
+
+## Balanced Mode (Default)
+- **Target**: Standard analysis with reasonable performance
+- **Memory**: 6GB heap allocation  
+- **Analysis Depth**: Standard features enabled
+- **Best For**: Most production use cases
+
+## Accuracy Mode
+- **Target**: Deep analysis with maximum precision
+- **Memory**: 8GB heap allocation
+- **Analysis Depth**: Comprehensive analysis enabled
+- **Best For**: Security research, detailed forensics
+
+## Configuration
+
+Performance modes can be configured via the API:
+
+\`\`\`bash
+curl -X POST "/api/analysis/diff" \\
+     -d '{"binary_id1":"uuid1","binary_id2":"uuid2","performance_mode":"speed"}'
+\`\`\`
+
+Performance modes automatically tune JVM parameters, analysis timeouts, and processing depth based on your requirements.`;
+    }
+    
+    if (filePath.includes('binary-comparison/usage-examples')) {
+      return `# Binary Comparison Usage Examples
+
+## Quick Version Comparison
+
+\`\`\`bash
+# Upload binaries
+curl -X POST "http://localhost:5000/api/binaries" -F "file=@app_v1.exe"
+curl -X POST "http://localhost:5000/api/binaries" -F "file=@app_v2.exe"
+
+# Start comparison
+curl -X POST "/api/analysis/diff" \\
+     -H "Content-Type: application/json" \\
+     -d '{"binary_id1":"uuid1","binary_id2":"uuid2","performance_mode":"speed"}'
+\`\`\`
+
+## Detailed Analysis Workflow
+
+\`\`\`python
+import requests
+import time
+
+base_url = "http://localhost:5000/api"
+
+# 1. Upload and analyze binaries
+with open("target_v1.exe", "rb") as f:
+    resp1 = requests.post(f"{base_url}/binaries", files={"file": f})
+    binary_id1 = resp1.json()["binary"]["id"]
+
+# 2. Start detailed comparison
+compare_resp = requests.post(f"{base_url}/analysis/diff", json={
+    "binary_id1": binary_id1,
+    "binary_id2": binary_id2,
+    "diff_type": "structural_graph",
+    "performance_mode": "accuracy"
+})
+
+# 3. Monitor progress
+task_id = compare_resp.json()["task_id"]
+while True:
+    result = requests.get(f"{base_url}/analysis/diff/{task_id}")
+    if result.json()["status"] == "completed":
+        break
+    time.sleep(15)
+\`\`\`
+
+## Best Practices
+
+- Use **Speed mode** for CI/CD and frequent comparisons
+- Use **Balanced mode** for production analysis
+- Use **Accuracy mode** for security research
+- Monitor system resources during large binary analysis
+- Implement proper error handling for long-running tasks`;
+    }
+    
     if (filePath.includes('README.md') || filePath === '') {
       return `# ShadowSeek Documentation Overview
 
@@ -404,6 +551,9 @@ Complete API documentation:
 - **[Binary Management](/docs/api-reference/binary-management)** - Binary upload and management APIs
 - **[Function Analysis](/docs/api-reference/function-analysis)** - Function decompilation APIs
 - **[Security Analysis](/docs/api-reference/security-analysis)** - Security scanning APIs
+- **[Binary Comparison](/docs/api-reference/binary-comparison)** - Binary diff and comparison APIs
+- **[AI-Powered Insights](/docs/api-reference/ai-insights)** - AI analysis and web search APIs
+- **[Data Management](/docs/api-reference/data-management)** - Import and export APIs
 - **[Fuzzing APIs](/docs/api-reference/fuzzing-apis)** - Fuzzing harness generation APIs
 - **[Task Management](/docs/api-reference/task-management)** - Analysis task APIs
 
