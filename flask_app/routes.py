@@ -3542,7 +3542,7 @@ def compare_binaries():
                 binary_id1=binary_id1,
                 binary_id2=binary_id2,
                 diff_type=diff_type,
-                auto_save_db=True,
+                auto_save_db=False,
                 performance_mode=performance_mode
             )
             
