@@ -3,10 +3,10 @@
 🔍 **Enterprise-grade binary security analysis with AI-powered vulnerability detection and intelligent fuzzing harness generation**
 
 > **Author**: [Mohammed Tanveer (@threatpointer)](https://github.com/threatpointer) - Security Researcher & Architect
-
-> ⚠️ **Important**: All system-dependent hardcoded paths have been removed for portability. Use our **automated setup scripts** for easy configuration!
+ 
+> 🚀 **One-Command Setup**: Run `python setup-shadowseek.py` to automatically install dependencies, configure environment, and start all components!
 > 
-> 🚀 **Quick Setup**: Run `python setup_environment.py` (recommended) or `setup_environment.bat` (Windows) to automatically configure your environment.
+> ✨ **Enhanced Features**: Automatic dependency installation, corporate network support, environment refresh, and intelligent error recovery.
 > 
 > 📚 **Documentation**: See [Docs/SETUP_SCRIPTS_README.md](Docs/SETUP_SCRIPTS_README.md) for setup guide and [Docs/ENVIRONMENT_VARIABLES.md](Docs/ENVIRONMENT_VARIABLES.md) for manual configuration.
 
@@ -17,7 +17,7 @@ ShadowSeek is a revolutionary binary security analysis platform that transforms 
 ## ✨ Key Features
 
 - 🧠 **AI-Powered Security Analysis** - LLM-enhanced vulnerability detection with evidence-based confidence scoring
-- 🎯 **Intelligent Fuzzing** - AI-driven fuzzing harness generation for AFL/AFL++ with target selection automation
+- 🎯 **Intelligent Fuzzing** - AI-driven fuzzing harness generation for AFL/AFL++/HongFuzz/LibFuzzer with target selection automation
 - 🛡️ **Comprehensive Vulnerability Detection** - 75+ dangerous function patterns with CWE/CVE classification
 - 🔄 **Binary Differential Analysis** - Advanced BinDiff capabilities using ghidriff for comparing binary versions and tracking changes
 - 🎨 **Professional User Experience** - Modern React UI with syntax highlighting and seamless navigation
@@ -78,61 +78,95 @@ ShadowSeek is a revolutionary binary security analysis platform that transforms 
 
 ## 📋 Requirements
 
-- **Python 3.8+** with virtual environment support
-- **Ghidra 10.4+** (tested with 11.3.2)
-- **Node.js 16+** with npm
+### **System Requirements**
+- **Python 3.8+** (required - install from [python.org](https://python.org))
 - **8GB+ RAM** for binary analysis
 - **20GB+ disk space** for projects and analysis results
 - **Windows, macOS, or Linux** (Windows recommended for full compatibility)
 
+### **Auto-Installed by Setup Script**
+- **Ghidra 10.4+** (detected automatically or prompted for path)
+- **Node.js 16+** with npm (installed from [nodejs.org](https://nodejs.org))
+- **Java JDK 11+** (installed from [Eclipse Adoptium](https://adoptium.net))
+- **Git** (installed from [git-scm.com](https://git-scm.com)) - optional but recommended
+- **Python packages** (Flask, React dependencies, AI libraries, etc.)
+
+> 💡 **Note**: The `setup-shadowseek.py` script automatically installs missing dependencies from official sources, handles corporate network restrictions, and configures everything for you!
+
 ## ⚡ Quick Start
 
-### 1. Clone and Setup
+### 1. Clone and Auto-Setup (Recommended)
 ```bash
 git clone https://github.com/threatpointer/ShadowSeek.git
 cd ShadowSeek
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
+# 🚀 One-command setup - installs everything automatically!
+python setup-shadowseek.py
 ```
 
-### 2. Configure Environment
+**✨ The enhanced setup script automatically:**
+- ✅ Installs Node.js, Java JDK, Git from official sources
+- ✅ Creates optimized virtual environment (with `uv` if available)
+- ✅ Installs all Python and frontend dependencies
+- ✅ **Installs official Ghidra Bridge server scripts** (enables Python-Ghidra integration)
+- ✅ Configures Ghidra Bridge integration
+- ✅ Sets up environment variables and directories
+- ✅ Starts all components and tests connectivity
+- ✅ Handles corporate networks and SSL issues
+- ✅ Refreshes environment variables automatically
+
+### 2. Manual Setup (Advanced Users)
 ```bash
-# Copy environment template
-cp env_template.txt .env
+# Create virtual environment with uv (faster) or venv
+uv venv .venv  # or: python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 
-# Edit .env with your settings:
-# - GHIDRA_INSTALL_DIR: Your Ghidra installation directory
-# - AI API keys for enhanced analysis
-# - Database and upload paths
+# Install dependencies  
+uv pip install -r requirements.txt  # or: pip install -r requirements.txt
+
+# Install Ghidra Bridge server scripts (REQUIRED for bridge functionality)
+python -m ghidra_bridge.install_server ghidra_scripts
+
+# Install frontend dependencies
+cd frontend && npm install
+
+# Configure environment
+python setup-shadowseek.py --skip-install
 ```
 
-### 3. Initialize Database
-```bash
-python migrate_database.py
-python add_vulnerability_tables.py
-python add_fuzzing_tables.py
-```
-
-### 4. Start Platform
-```bash
-# All-in-one startup (Windows)
-.\start_all.bat
-
-# Or start components individually:
-python start_ghidra_bridge.py  # Backend bridge
-python run.py                  # Flask API
-cd frontend && npm start       # React UI
-```
-
-### 5. Access Platform
+### 3. Access Platform
+After setup completes:
 - **Main Interface**: http://localhost:3000
 - **API Documentation**: http://localhost:5000/api/docs
 - **System Status**: http://localhost:5000/api/status
+
+### 4. Setup Options
+```bash
+# Common setup options
+python setup-shadowseek.py --auto              # Non-interactive mode
+python setup-shadowseek.py --refresh-env       # Refresh environment variables
+python setup-shadowseek.py --skip-system-check # Skip dependency checks
+python setup-shadowseek.py --force-continue    # Continue with missing deps
+```
+
+## 🛠️ Enhanced Setup Features
+
+The `setup-shadowseek.py` script provides enterprise-grade installation automation:
+
+### **⚡ Fast Package Management**
+- **uv Integration**: Uses `uv` for 3-5x faster Python package installation when available
+- **Intelligent Fallbacks**: Gracefully falls back to `pip` when needed
+- **Virtual Environment Management**: Creates and manages optimized Python environments
+
+### **🔄 Environment Refresh**
+- **Real-time PATH Updates**: Refreshes environment variables without restarting terminal
+- **Command Verification**: Tests newly installed software immediately
+- **Registry Integration**: Updates Windows PATH from registry for instant availability
+
+### **🤖 Intelligent Installation**
+- **Official Sources**: Downloads from official repositories (nodejs.org, adoptium.net, etc.)
+- **Version Compatibility**: Ensures compatible versions for all dependencies
+- **Error Recovery**: Attempts multiple installation methods with detailed feedback
 
 ## 🎯 Usage Workflow
 

@@ -42,7 +42,7 @@ git clone <your-repository-url>
 cd ShadowSeek
 
 # 2. Run automated setup (installs everything)
-python setup_environment.py --auto
+python setup-shadowseek.py --auto
 
 # 3. Start analyzing!
 # Frontend: http://localhost:3000
@@ -52,6 +52,7 @@ python setup_environment.py --auto
 **What the automated setup does:**
 - ✅ **Auto-detects** Ghidra installations
 - ✅ **Installs** missing Python dependencies
+- ✅ **Installs** official Ghidra Bridge server scripts (enables Python-Ghidra integration)
 - ✅ **Creates** .env configuration file
 - ✅ **Validates** all connections
 - ✅ **Starts** all components automatically
@@ -65,7 +66,7 @@ git clone <repository-url>
 cd ShadowSeek
 
 # Option A: Use Python setup script
-python setup_environment.py
+python setup-shadowseek.py
 
 # Option B: Use Windows batch script
 setup_environment.bat
@@ -95,7 +96,7 @@ git clone <repository-url>
 cd ShadowSeek
 
 # Run setup
-python setup_environment.py --auto
+python setup-shadowseek.py --auto
 ```
 
 ---
@@ -346,16 +347,16 @@ graph TD
 reset_environment.bat
 
 # Solution 2: Manual cleanup and pip fallback
-python setup_environment.py --force-clean --use-pip --auto
+python setup-shadowseek.py --force-clean --use-pip --auto
 
 # Solution 3: Manual virtual environment recreation
 rm -rf .venv  # Linux/macOS
 rmdir /s /q .venv  # Windows
-python setup_environment.py --auto
+python setup-shadowseek.py --auto
 
 # Issue: UV package manager issues
 # Solution: Force use of pip instead
-python setup_environment.py --use-pip --auto
+python setup-shadowseek.py --use-pip --auto
 ```
 
 ### **🖥️ Node.js Issues**

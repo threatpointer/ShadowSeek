@@ -11,10 +11,10 @@ Welcome to ShadowSeek! This guide will get you from zero to analyzing binaries w
 Ensure you have ShadowSeek installed:
 
 - ✅ **Installation Complete**: Follow the [Installation Guide](installation.md) if needed
-- ✅ **System Running**: All components started via `start_all.bat` or `setup_environment.py --auto`
+- ✅ **System Running**: All components started via `start_all.bat` or `setup-shadowseek.py --auto`
 - ✅ **Web Access**: Can access http://localhost:3000
 
-**Not installed yet?** Run: `python setup_environment.py --auto`
+**Not installed yet?** Run: `python setup-shadowseek.py --auto`
 
 ---
 

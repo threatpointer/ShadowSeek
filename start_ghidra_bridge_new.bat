@@ -18,21 +18,21 @@ echo Ghidra Bridge Startup Log >> %LOG_FILE%
 echo Started at: %datestamp% >> %LOG_FILE%
 echo ======================================== >> %LOG_FILE%
 
-:: Set Ghidra path from .env file or environment variable
-if defined GHIDRA_INSTALL_DIR (
-    set GHIDRA_PATH=%GHIDRA_INSTALL_DIR%
-    echo Using GHIDRA_INSTALL_DIR from environment: %GHIDRA_PATH% >> %LOG_FILE%
-) else (
-    echo GHIDRA_INSTALL_DIR not set in environment, checking .env file... >> %LOG_FILE%
-    set GHIDRA_PATH=
-    if exist .env (
-        echo Loading GHIDRA_INSTALL_DIR from .env file... >> %LOG_FILE%
-        for /F "tokens=1,2 delims==" %%a in (.env) do (
-            if "%%a"=="GHIDRA_INSTALL_DIR" (
-                set GHIDRA_PATH=%%b
-                echo Found GHIDRA_INSTALL_DIR: %%b >> %LOG_FILE%
-            )
+:: Always read Ghidra path from .env file first (more reliable than environment variables)
+set GHIDRA_PATH=
+if exist .env (
+    echo Loading GHIDRA_INSTALL_DIR from .env file... >> %LOG_FILE%
+    for /F "tokens=1,2 delims==" %%a in (.env) do (
+        if "%%a"=="GHIDRA_INSTALL_DIR" (
+            set GHIDRA_PATH=%%b
+            echo Found GHIDRA_INSTALL_DIR in .env: %%b >> %LOG_FILE%
         )
+    )
+) else (
+    echo .env file not found, checking environment variable... >> %LOG_FILE%
+    if defined GHIDRA_INSTALL_DIR (
+        set GHIDRA_PATH=%GHIDRA_INSTALL_DIR%
+        echo Using GHIDRA_INSTALL_DIR from environment: %GHIDRA_PATH% >> %LOG_FILE%
     )
 )
 
@@ -67,15 +67,16 @@ if not exist %PROJECTS_DIR%\dummy.bin (
     echo Created dummy file >> %LOG_FILE%
 )
 
-:: Start Ghidra Bridge server
+:: Start Ghidra Bridge server using official ghidra_bridge server script
 echo Starting Ghidra Bridge server with project %PROJECT_NAME% on port %PORT%...
 echo ======================================== >> %LOG_FILE%
-echo STARTING GHIDRA BRIDGE SERVER >> %LOG_FILE%
-echo Command: "%GHIDRA_PATH%\support\analyzeHeadless.bat" "%PROJECTS_DIR%" "%PROJECT_NAME%" -postScript ghidra_bridge_server.py "%PORT%" >> %LOG_FILE%
+echo STARTING OFFICIAL GHIDRA BRIDGE SERVER >> %LOG_FILE%
+echo Using official ghidra_bridge server script with jfx_bridge support >> %LOG_FILE%
+echo Command: "%GHIDRA_PATH%\support\analyzeHeadless.bat" "%PROJECTS_DIR%" "%PROJECT_NAME%" -scriptPath "%CD%\ghidra_scripts" -postScript ghidra_bridge_server.py >> %LOG_FILE%
 echo ======================================== >> %LOG_FILE%
 
 :: The correct syntax for running a script with arguments - capture ALL output
-"%GHIDRA_PATH%\support\analyzeHeadless.bat" "%PROJECTS_DIR%" "%PROJECT_NAME%" -postScript ghidra_bridge_server.py "%PORT%" >> %LOG_FILE% 2>&1
+"%GHIDRA_PATH%\support\analyzeHeadless.bat" "%PROJECTS_DIR%" "%PROJECT_NAME%" -scriptPath "%CD%\ghidra_scripts" -postScript ghidra_bridge_server.py >> %LOG_FILE% 2>&1
 
 :: Log completion
 echo ======================================== >> %LOG_FILE%

@@ -20,6 +20,11 @@ if exist .env (
         )
     )
     echo Environment variables loaded.
+) else (
+    echo.
+    echo WARNING: .env file not found
+    echo Please run the setup script first: python setup-shadowseek.py
+    echo.
 )
 
 REM Check for Python
@@ -37,16 +42,32 @@ if not exist "temp" mkdir temp
 if not exist "instance" mkdir instance
 if not exist "ghidra_projects" mkdir ghidra_projects
 
+REM Get Ghidra path from .env file (more reliable than environment variables)
+set GHIDRA_PATH=
+if exist .env (
+    for /F "tokens=1,2 delims==" %%a in (.env) do (
+        if "%%a"=="GHIDRA_INSTALL_DIR" (
+            set GHIDRA_PATH=%%b
+        )
+    )
+) else (
+    if defined GHIDRA_INSTALL_DIR (
+        set GHIDRA_PATH=%GHIDRA_INSTALL_DIR%
+    )
+)
+
 REM Check if Ghidra path is set
-if "%GHIDRA_INSTALL_DIR%"=="" (
+if "%GHIDRA_PATH%"=="" (
     echo GHIDRA_INSTALL_DIR is not set. Please set it in the .env file.
+    echo Or run: python setup-shadowseek.py
     exit /b 1
 )
 
 REM Check if Ghidra path exists
-if not exist "%GHIDRA_INSTALL_DIR%" (
-    echo Ghidra installation not found at %GHIDRA_INSTALL_DIR%
+if not exist "%GHIDRA_PATH%" (
+    echo Ghidra installation not found at %GHIDRA_PATH%
     echo Please check the GHIDRA_INSTALL_DIR in your .env file.
+    echo Or run: python setup-shadowseek.py
     exit /b 1
 )
 
@@ -76,18 +97,36 @@ echo Checking virtual environment...
 REM Check if virtual environment exists
 if not exist ".venv\Scripts\python.exe" (
     echo ERROR: Virtual environment not found at .venv\Scripts\python.exe
-    echo Please run setup_environment.py first to create the virtual environment
+    echo Please run setup-shadowseek.py first to create the virtual environment
+    echo.
+    echo Quick fix: python setup-shadowseek.py --auto
     pause
     exit /b 1
 )
 
 echo Virtual environment found: .venv\Scripts\python.exe
 echo Testing Flask imports in virtual environment...
-".venv\Scripts\python.exe" -c "import flask, flask_sqlalchemy, flask_cors; print('Flask imports OK')" 2>nul
+".venv\Scripts\python.exe" -c "import flask, flask_sqlalchemy, flask_cors, ghidra_bridge, requests; print('Flask imports OK')" 2>nul
 if %ERRORLEVEL% neq 0 (
     echo ERROR: Flask dependencies not found in virtual environment
-    echo Installing dependencies...
-    ".venv\Scripts\activate.bat" && uv pip install flask flask-sqlalchemy flask-cors python-dotenv ghidra-bridge
+    echo Installing critical dependencies...
+    
+    REM Try uv first, fallback to pip
+    where uv >nul 2>nul
+    if %ERRORLEVEL% equ 0 (
+        echo Using uv for faster installation...
+        call ".venv\Scripts\activate.bat" && uv pip install flask flask-sqlalchemy flask-cors flask-migrate flask-restx requests python-dotenv ghidra-bridge ghidriff werkzeug sqlalchemy psutil aiohttp websockets
+    ) else (
+        echo Using pip for installation...
+        call ".venv\Scripts\activate.bat" && python -m pip install flask flask-sqlalchemy flask-cors flask-migrate flask-restx requests python-dotenv ghidra-bridge ghidriff werkzeug sqlalchemy psutil aiohttp websockets
+    )
+    
+    if %ERRORLEVEL% neq 0 (
+        echo ERROR: Dependency installation failed
+        echo Please run: python setup-shadowseek.py --skip-system-check
+        pause
+        exit /b 1
+    )
 )
 
 echo Starting Flask with virtual environment Python...

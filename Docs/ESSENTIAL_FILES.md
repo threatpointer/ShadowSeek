@@ -12,7 +12,7 @@ This document outlines the essential files in ShadowSeek that users and develope
 |------|---------|-------|
 | **`start_all.bat`** | Complete system startup (Windows) | `start_all.bat` |
 | **`start_all.sh`** | Complete system startup (Linux/macOS) | `./start_all.sh` |
-| **`setup_environment.py`** | Automated installation and setup | `python setup_environment.py --auto` |
+| **`setup-shadowseek.py`** | Enhanced automated installation and setup | `python setup-shadowseek.py --auto` |
 | **`run.py`** | Flask backend entry point | `python run.py` |
 | **`stop.bat`** | Complete system shutdown | `stop.bat` |
 

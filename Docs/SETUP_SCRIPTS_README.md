@@ -6,21 +6,23 @@ The ShadowSeek setup scripts now feature **automatic dependency installation**, 
 
 ## 📋 **Available Scripts**
 
-### **1. Primary Setup Script: `setup_environment.py`**
+### **1. Primary Setup Script: `setup-shadowseek.py`**
 
-**Complete automated setup with dependency installation**
+**Complete automated setup with intelligent dependency installation**
 
 ```bash
 # Basic setup - installs dependencies and configures everything
-python setup_environment.py
+python setup-shadowseek.py
 
 # Automated mode - no prompts, uses smart defaults
-python setup_environment.py --auto
+python setup-shadowseek.py --auto
 
 # Advanced options
-python setup_environment.py --ghidra-path "/path/to/ghidra"
-python setup_environment.py --skip-install    # Skip dependency installation
-python setup_environment.py --skip-startup    # Skip automatic startup
+python setup-shadowseek.py --refresh-env          # Refresh environment variables
+python setup-shadowseek.py --skip-system-check    # Skip dependency checks
+python setup-shadowseek.py --skip-install         # Skip dependency installation
+python setup-shadowseek.py --skip-startup         # Skip automatic startup
+python setup-shadowseek.py --force-continue       # Continue with missing deps
 ```
 
 **✨ New Features**:
@@ -89,16 +91,16 @@ The setup scripts now perform **comprehensive system dependency checking** and c
 
 ```bash
 # Complete system check and setup
-python setup_environment.py
+python setup-shadowseek.py
 
 # Skip system requirements check
-python setup_environment.py --skip-system-check
+python setup-shadowseek.py --skip-system-check
 
 # Auto mode - automatically install missing dependencies
-python setup_environment.py --auto
+python setup-shadowseek.py --auto
 
 # Skip specific types of installation
-python setup_environment.py --skip-install    # Skip Python packages
+python setup-shadowseek.py --skip-install    # Skip Python packages
 ```
 
 ## 🎯 **Usage Examples**
@@ -111,28 +113,28 @@ python setup_environment.py --skip-install    # Skip Python packages
 # - Creates .env configuration
 # - Starts all components
 # - Tests connectivity
-python setup_environment.py --auto
+python setup-shadowseek.py --auto
 ```
 
 ### **Custom Ghidra Path**
 ```bash
 # Specify Ghidra installation location
-python setup_environment.py --ghidra-path "D:\Tools\ghidra_11.3.2"
+python setup-shadowseek.py --ghidra-path "D:\Tools\ghidra_11.3.2"
 ```
 
 ### **Advanced Users**
 ```bash
 # Skip automatic dependency installation
-python setup_environment.py --skip-install
+python setup-shadowseek.py --skip-install
 
 # Skip component startup (configure only)
-python setup_environment.py --skip-startup
+python setup-shadowseek.py --skip-startup
 ```
 
 ### **Troubleshooting Mode**
 ```bash
 # Install dependencies only
-python setup_environment.py --skip-startup --ghidra-path ""
+python setup-shadowseek.py --skip-startup --ghidra-path ""
 ```
 
 ## ✨ **What Gets Installed/Configured**
@@ -313,7 +315,7 @@ PowerShell execution policy prevents network testing
 ### **Updating Dependencies**
 ```bash
 # Re-run setup to update packages
-python setup_environment.py --skip-startup
+python setup-shadowseek.py --skip-startup
 
 # Or manually update
 pip install -r requirements.txt --upgrade
@@ -322,7 +324,7 @@ pip install -r requirements.txt --upgrade
 ### **Reconfiguration**
 ```bash
 # Reconfigure without affecting dependencies
-python setup_environment.py --skip-install
+python setup-shadowseek.py --skip-install
 ```
 
 The enhanced setup scripts with automatic dependency installation make ShadowSeek much easier to deploy and get running quickly! 🚀 

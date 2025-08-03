@@ -67,7 +67,7 @@ graph TD
 # Clone and setup
 git clone <repository-url>
 cd ShadowSeek
-python setup_environment.py --auto
+python setup-shadowseek.py --auto
 ```
 
 ### **2. 🚀 Launch (1 minute)**

@@ -70,6 +70,12 @@ ipython_config.py
 # pipenv
 Pipfile.lock
 
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
 # PEP 582
 __pypackages__/
 
