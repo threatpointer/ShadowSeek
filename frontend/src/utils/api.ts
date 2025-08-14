@@ -511,6 +511,20 @@ class ApiClient {
     return response.data;
   }
 
+  async getOllamaModels(baseUrl?: string): Promise<{ success: boolean; models: Array<{ name: string; size: number; size_formatted: string; modified_at: string }>; server_url: string; error?: string }> {
+    const params = baseUrl ? { base_url: baseUrl } : {};
+    const response = await api.get('/config/ollama/models', { params });
+    return response.data;
+  }
+
+  async getOllamaStatus(baseUrl?: string, model?: string): Promise<{ success: boolean; status: any; error?: string }> {
+    const params: any = {};
+    if (baseUrl) params.base_url = baseUrl;
+    if (model) params.model = model;
+    const response = await api.get('/config/ollama/status', { params });
+    return response.data;
+  }
+
   // Task management
   async cancelTask(taskId: string): Promise<{ status: string }> {
     const response = await api.post(`/tasks/cancel/${taskId}`);

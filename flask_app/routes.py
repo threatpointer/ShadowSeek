@@ -3192,6 +3192,164 @@ def get_ai_status():
         logger.error(f"Error checking AI status: {e}")
         return jsonify({'error': str(e)}), 500
 
+@api_bp.route('/config/ollama/models', methods=['GET'])
+def get_ollama_models():
+    """Get available models from Ollama server"""
+    try:
+        import requests
+        
+        # Get Ollama base URL from request or use default
+        base_url = request.args.get('base_url', 'http://localhost:11434')
+        base_url = base_url.rstrip('/')
+        
+        # Fetch available models from Ollama
+        response = requests.get(f"{base_url}/api/tags", timeout=10)
+        
+        if response.status_code == 200:
+            models_data = response.json()
+            models = []
+            
+            for model in models_data.get('models', []):
+                model_name = model.get('name', '')
+                model_size = model.get('size', 0)
+                modified_at = model.get('modified_at', '')
+                
+                # Format size in human readable format
+                if model_size > 0:
+                    if model_size >= 1024**3:  # GB
+                        size_str = f"{model_size / (1024**3):.1f}GB"
+                    elif model_size >= 1024**2:  # MB
+                        size_str = f"{model_size / (1024**2):.0f}MB"
+                    else:
+                        size_str = f"{model_size / 1024:.0f}KB"
+                else:
+                    size_str = "Unknown size"
+                
+                models.append({
+                    'name': model_name,
+                    'size': model_size,
+                    'size_formatted': size_str,
+                    'modified_at': modified_at
+                })
+            
+            return jsonify({
+                'success': True,
+                'models': models,
+                'server_url': base_url
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': f'Ollama server returned status {response.status_code}'
+            }), 400
+            
+    except requests.exceptions.ConnectionError:
+        return jsonify({
+            'success': False,
+            'error': 'Could not connect to Ollama server. Make sure Ollama is running.'
+        }), 400
+    except requests.exceptions.Timeout:
+        return jsonify({
+            'success': False,
+            'error': 'Timeout connecting to Ollama server'
+        }), 400
+    except Exception as e:
+        logger.error(f"Error fetching Ollama models: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'Failed to fetch models: {str(e)}'
+        }), 500
+
+@api_bp.route('/config/ollama/status', methods=['GET'])
+def get_ollama_status():
+    """Get Ollama server status and check if a specific model is loaded"""
+    try:
+        import requests
+        
+        base_url = request.args.get('base_url', 'http://localhost:11434')
+        model_name = request.args.get('model')
+        base_url = base_url.rstrip('/')
+        
+        # Check server status
+        try:
+            response = requests.get(f"{base_url}/api/tags", timeout=10)
+            if response.status_code != 200:
+                return jsonify({
+                    'success': False,
+                    'error': f'Ollama server returned status {response.status_code}'
+                }), 400
+        except requests.exceptions.ConnectionError:
+            return jsonify({
+                'success': False,
+                'error': 'Cannot connect to Ollama server. Make sure Ollama is running.'
+            }), 400
+        except requests.exceptions.Timeout:
+            return jsonify({
+                'success': False,
+                'error': 'Timeout connecting to Ollama server'
+            }), 400
+        
+        status_info = {
+            'server_running': True,
+            'server_url': base_url
+        }
+        
+        # If model name is provided, check if it's loaded
+        if model_name:
+            try:
+                # Try a very quick generation to see if model is loaded
+                test_payload = {
+                    "model": model_name,
+                    "prompt": "Hi",
+                    "stream": False,
+                    "options": {"num_predict": 1}
+                }
+                
+                test_response = requests.post(
+                    f"{base_url}/api/generate",
+                    json=test_payload,
+                    timeout=10
+                )
+                
+                if test_response.status_code == 200:
+                    result = test_response.json()
+                    if 'response' in result:
+                        status_info['model_loaded'] = True
+                        status_info['model_status'] = 'ready'
+                    else:
+                        status_info['model_loaded'] = False
+                        status_info['model_status'] = 'unknown'
+                else:
+                    error_data = test_response.json() if test_response.content else {}
+                    error_msg = error_data.get('error', '')
+                    if 'server loading model' in error_msg.lower():
+                        status_info['model_loaded'] = False
+                        status_info['model_status'] = 'loading'
+                    else:
+                        status_info['model_loaded'] = False
+                        status_info['model_status'] = 'error'
+                        status_info['model_error'] = error_msg
+                        
+            except requests.exceptions.Timeout:
+                status_info['model_loaded'] = False
+                status_info['model_status'] = 'loading_or_slow'
+            except Exception as e:
+                status_info['model_loaded'] = False
+                status_info['model_status'] = 'error'
+                status_info['model_error'] = str(e)
+        
+        return jsonify({
+            'success': True,
+            'status': status_info
+        })
+        
+    except Exception as e:
+        logger.error(f"Error checking Ollama status: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'Failed to check Ollama status: {str(e)}'
+        }), 500
+
 @api_bp.route('/config/test-connection', methods=['POST'])
 def test_ai_connection():
     """Test AI service connection for all supported providers"""
@@ -3309,9 +3467,42 @@ def test_ai_connection():
                     'error': f'Gemini connection test failed: {str(test_error)}'
                 }), 400
         
+        elif provider == 'ollama':
+            base_url = data.get('base_url', 'http://localhost:11434')
+            model = data.get('model', 'llama2')
+            
+            # Ollama doesn't require API key
+            try:
+                # Try to initialize Ollama AI service
+                test_ai_service = MultiProviderAIService(provider='ollama', model=model)
+                
+                if not test_ai_service.provider:
+                    return jsonify({
+                        'error': 'Failed to initialize Ollama client. Make sure Ollama is running.'
+                    }), 400
+                
+                # Test the connection
+                test_result = test_ai_service.test_connection()
+                
+                if test_result.get('success'):
+                    return jsonify({
+                        'success': True,
+                        'message': f'Ollama connection test successful!'
+                    })
+                else:
+                    return jsonify({
+                        'error': f'Ollama connection test failed: {test_result.get("error", "Unknown error")}'
+                    }), 400
+                    
+            except Exception as test_error:
+                logger.error(f"Ollama connection test error: {test_error}")
+                return jsonify({
+                    'error': f'Ollama connection test failed: {str(test_error)}'
+                }), 400
+        
         else:
             return jsonify({
-                'error': f'Unsupported provider: {provider}. Supported providers: openai, claude, gemini'
+                'error': f'Unsupported provider: {provider}. Supported providers: openai, claude, gemini, ollama'
             }), 400
         
     except Exception as e:

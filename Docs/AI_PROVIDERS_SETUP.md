@@ -2,11 +2,12 @@
 
 ## 🤖 AI Provider Support
 
-ShadowSeek now supports three major AI providers for enhanced binary analysis:
+ShadowSeek now supports four major AI providers for enhanced binary analysis:
 
 - **OpenAI (GPT-3.5/GPT-4)** - Most tested and recommended
 - **Anthropic Claude** - Excellent for security analysis
 - **Google Gemini** - Fast and cost-effective
+- **Ollama (Local)** - Privacy-focused local inference
 
 ## 📦 Installation
 
@@ -40,13 +41,19 @@ uv add anthropic>=0.7.0 google-generativeai>=0.3.0
 3. Generate an API key
 4. Copy the key
 
+#### Ollama (Local)
+1. Install Ollama from https://ollama.ai/
+2. Start Ollama service: `ollama serve`
+3. Download a model: `ollama pull llama2`
+4. No API key required - runs locally
+
 ### 3. Configure Environment Variables
 
 Add the following to your `.env` file:
 
 ```bash
 # Primary AI provider selection
-LLM_PROVIDER=openai  # Options: openai, claude, gemini
+LLM_PROVIDER=openai  # Options: openai, claude, gemini, ollama
 
 # OpenAI Configuration
 OPENAI_API_KEY=sk-your-openai-key-here
@@ -59,6 +66,10 @@ CLAUDE_MODEL=claude-3-5-sonnet-20241022  # Options: claude-3-5-sonnet-20241022, 
 # Gemini Configuration
 GEMINI_API_KEY=your-gemini-key-here
 GEMINI_MODEL=gemini-2.5-flash  # Options: gemini-2.5-flash, gemini-2.5-pro, gemini-2.0-flash
+
+# Ollama Configuration (Local - No API Key Required)
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama2  # Options: llama2, codellama, mistral, llama3, etc.
 
 # AI Service Settings (Optional)
 LLM_TIMEOUT=60
@@ -99,6 +110,11 @@ curl -X POST http://localhost:5000/api/config/test-connection \
 curl -X POST http://localhost:5000/api/config/test-connection \
   -H "Content-Type: application/json" \
   -d '{"provider": "gemini", "api_key": "your-key", "model": "gemini-pro"}'
+
+# Test Ollama (No API Key Required)
+curl -X POST http://localhost:5000/api/config/test-connection \
+  -H "Content-Type: application/json" \
+  -d '{"provider": "ollama", "base_url": "http://localhost:11434", "model": "llama2"}'
 ```
 
 ### Check AI Status
@@ -131,14 +147,22 @@ You can switch providers at any time:
 - **GPT-3.5 Turbo**: Good balance of speed and quality
 
 ### For Speed
-- **Gemini 1.5 Flash**: Fastest responses
+- **Ollama (Local)**: Fastest for repeated use, no API costs
+- **Gemini 1.5 Flash**: Fastest cloud responses
 - **GPT-3.5 Turbo**: Good speed with OpenAI reliability
 - **Gemini Pro**: Good speed with Google reliability
 
 ### For Cost Efficiency
-- **Gemini Pro**: Most cost-effective for high-volume analysis
+- **Ollama (Local)**: No ongoing costs, completely free after setup
+- **Gemini Pro**: Most cost-effective for high-volume cloud analysis
 - **GPT-3.5 Turbo**: Good balance of cost and performance
 - **Claude**: Higher cost but excellent quality
+
+### For Privacy & Security
+- **Ollama (Local)**: Complete data privacy, no external API calls
+- **Claude**: Strong privacy policies and security practices
+- **OpenAI**: Industry-standard security with data retention policies
+- **Gemini**: Google's enterprise security standards
 
 ## 🛠️ Troubleshooting
 
@@ -205,4 +229,44 @@ If you encounter issues with the multi-provider setup:
 3. Verify your `.env` file configuration
 4. Check the AI status endpoint for detailed information
 
-The multi-provider system is fully backward compatible - existing OpenAI configurations will continue to work without changes. 
+The multi-provider system is fully backward compatible - existing OpenAI configurations will continue to work without changes.
+
+## 🏠 Ollama Local Setup Guide
+
+### Installation
+```bash
+# Install Ollama (macOS/Linux)
+curl -fsSL https://ollama.ai/install.sh | sh
+
+# Or download from https://ollama.ai/ for Windows
+```
+
+### Model Setup
+```bash
+# Start Ollama service
+ollama serve
+
+# In another terminal, download models
+ollama pull llama2          # 7B general model
+ollama pull codellama       # Code-focused model
+ollama pull mistral         # Fast and capable
+ollama pull llama3          # Latest Llama model
+
+# List available models
+ollama list
+```
+
+### ShadowSeek Configuration
+```bash
+# Set Ollama as primary provider
+LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama2  # Use any model you've downloaded
+```
+
+### Advantages of Ollama
+- **Complete Privacy**: No data sent to external services
+- **No API Costs**: Free to use after initial setup
+- **Offline Operation**: Works without internet connection
+- **Custom Models**: Use specialized security models
+- **High Performance**: Optimized for local hardware 

@@ -180,6 +180,160 @@ class GeminiProvider(AIProvider):
             return {"success": False, "error": str(e)}
 
 
+class OllamaProvider(AIProvider):
+    """Ollama local LLM provider implementation"""
+    
+    def __init__(self, base_url: str, model: str):
+        """Initialize Ollama provider with base URL instead of API key"""
+        self.base_url = base_url.rstrip('/')
+        self.model = model
+        self.client = None
+        self.api_key = None  # Ollama doesn't use API keys
+    
+    def initialize_client(self) -> bool:
+        try:
+            import requests
+            self.client = requests.Session()
+            # Test if Ollama server is reachable
+            response = self.client.get(f"{self.base_url}/api/tags", timeout=5)
+            if response.status_code == 200:
+                return True
+            else:
+                logger.error(f"Ollama server returned status {response.status_code}")
+                return False
+        except ImportError:
+            logger.error("requests package not available for Ollama client")
+            return False
+        except Exception as e:
+            logger.error(f"Failed to initialize Ollama client: {e}")
+            return False
+    
+    def generate_response(self, system_prompt: str, user_prompt: str, max_tokens: int = 3000, temperature: float = 0.2) -> str:
+        if not self.client:
+            raise Exception("Ollama client not initialized")
+        
+        try:
+            import requests
+            
+            # Ollama API format
+            payload = {
+                "model": self.model,
+                "prompt": f"System: {system_prompt}\n\nUser: {user_prompt}",
+                "stream": False,
+                "options": {
+                    "temperature": temperature,
+                    "num_predict": max_tokens
+                }
+            }
+            
+            response = self.client.post(
+                f"{self.base_url}/api/generate",
+                json=payload,
+                timeout=120  # Ollama can be slower for local inference
+            )
+            
+            if response.status_code == 200:
+                try:
+                    result = response.json()
+                    return result.get('response', '')
+                except Exception as e:
+                    raise Exception(f"Invalid JSON response from Ollama: {str(e)}")
+            else:
+                try:
+                    error_data = response.json()
+                    error_msg = error_data.get('error', response.text)
+                    if 'server loading model' in error_msg.lower():
+                        raise Exception(f"Model '{self.model}' is still loading. Please wait and try again.")
+                    else:
+                        raise Exception(f"Ollama API error: {error_msg}")
+                except Exception as json_error:
+                    raise Exception(f"Ollama API returned status {response.status_code}: {response.text[:200]}")
+                
+                
+        except Exception as e:
+            raise Exception(f"Ollama generation failed: {str(e)}")
+    
+    def test_connection(self) -> Dict[str, Any]:
+        try:
+            if not self.client:
+                return {"success": False, "error": "Client not initialized"}
+            
+            import requests
+            import json as json_lib
+            
+            # Test server availability
+            try:
+                response = self.client.get(f"{self.base_url}/api/tags", timeout=15)
+                if response.status_code != 200:
+                    return {"success": False, "error": f"Ollama server returned status {response.status_code}"}
+            except requests.exceptions.Timeout:
+                return {"success": False, "error": "Timeout connecting to Ollama server. Make sure Ollama is running and accessible."}
+            except requests.exceptions.ConnectionError:
+                return {"success": False, "error": "Cannot connect to Ollama server. Make sure Ollama is running on the specified URL."}
+            
+            # Check if the specified model is available
+            models_data = response.json()
+            available_models = [model['name'] for model in models_data.get('models', [])]
+            
+            if self.model not in available_models:
+                return {
+                    "success": False, 
+                    "error": f"Model '{self.model}' not found. Available models: {', '.join(available_models) if available_models else 'None'}"
+                }
+            
+            # Test a simple generation with better error handling
+            test_payload = {
+                "model": self.model,
+                "prompt": "Hello",
+                "stream": False,
+                "options": {
+                    "num_predict": 3,
+                    "temperature": 0.1
+                }
+            }
+            
+            try:
+                test_response = self.client.post(
+                    f"{self.base_url}/api/generate",
+                    json=test_payload,
+                    timeout=60  # Increased timeout for model loading
+                )
+                
+                if test_response.status_code == 200:
+                    try:
+                        result = test_response.json()
+                        if 'response' in result:
+                            return {"success": True, "message": f"Ollama connection successful with model '{self.model}'"}
+                        elif 'error' in result:
+                            error_msg = result['error']
+                            if 'server loading model' in error_msg.lower():
+                                return {"success": False, "error": f"Model '{self.model}' is still loading. Please wait a moment and try again."}
+                            else:
+                                return {"success": False, "error": f"Model error: {error_msg}"}
+                        else:
+                            return {"success": False, "error": "Unexpected response format from Ollama"}
+                    except json_lib.JSONDecodeError:
+                        return {"success": False, "error": "Invalid JSON response from Ollama server"}
+                else:
+                    try:
+                        error_data = test_response.json()
+                        error_msg = error_data.get('error', test_response.text)
+                        if 'server loading model' in error_msg.lower():
+                            return {"success": False, "error": f"Model '{self.model}' is still loading. Please wait and try again."}
+                        else:
+                            return {"success": False, "error": f"Test generation failed: {error_msg}"}
+                    except json_lib.JSONDecodeError:
+                        return {"success": False, "error": f"Test generation failed with status {test_response.status_code}: {test_response.text[:200]}"}
+                        
+            except requests.exceptions.Timeout:
+                return {"success": False, "error": f"Timeout during test generation. Model '{self.model}' might be loading or the server is slow."}
+            except requests.exceptions.RequestException as e:
+                return {"success": False, "error": f"Request failed: {str(e)}"}
+                
+        except Exception as e:
+            return {"success": False, "error": f"Unexpected error: {str(e)}"}
+
+
 class MultiProviderAIService:
     """Multi-provider AI service that can use OpenAI, Claude, or Gemini"""
     
@@ -223,6 +377,12 @@ class MultiProviderAIService:
             model = model or os.getenv('GEMINI_MODEL', 'gemini-2.5-flash')
             if api_key:
                 self.provider = GeminiProvider(api_key, model)
+        
+        elif self.provider_name == 'ollama':
+            base_url = os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')
+            model = model or os.getenv('OLLAMA_MODEL', 'llama2')
+            # Ollama doesn't require API key
+            self.provider = OllamaProvider(base_url, model)
         
         else:
             logger.error(f"Unsupported provider: {self.provider_name}")

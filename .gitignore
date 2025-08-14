@@ -1,20 +1,46 @@
-# User-specified exclusions
-archive/
-memory-bank/
-.cursorignore
+# ShadowSeek - Git Ignore File
+# Protects sensitive configuration, local development artifacts, and memory bank details
 
-# Environment variables and configuration
+# ==============================================================================
+# SENSITIVE CONFIGURATION FILES
+# ==============================================================================
+
+# Environment variables (API keys, database URLs, etc.)
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
 
-# Python
+# Configuration files with sensitive data
+config.ini
+config.yaml
+config.yml
+*.config
+
+# Local configuration overrides
+local_config.py
+local_settings.py
+
+# ==============================================================================
+# MEMORY BANK (Private Development Context)
+# ==============================================================================
+
+# Memory bank contains development context and should not be public
+memory-bank/
+memory-bank/**
+
+# ==============================================================================
+# PYTHON
+# ==============================================================================
+
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+
+# C extensions
 *.so
+
+# Distribution / packaging
 .Python
 build/
 develop-eggs/
@@ -57,6 +83,29 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
 # Jupyter Notebook
 .ipynb_checkpoints
 
@@ -70,12 +119,6 @@ ipython_config.py
 # pipenv
 Pipfile.lock
 
-# Virtual environments
-.venv/
-venv/
-env/
-ENV/
-
 # PEP 582
 __pypackages__/
 
@@ -85,6 +128,15 @@ celerybeat.pid
 
 # SageMath parsed files
 *.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
 
 # Spyder project settings
 .spyderproject
@@ -104,12 +156,16 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# Node.js and npm
+# ==============================================================================
+# NODE.JS / REACT FRONTEND
+# ==============================================================================
+
+# Dependencies
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
+lerna-debug.log*
 
 # Runtime data
 pids
@@ -164,11 +220,11 @@ jspm_packages/
 .yarn-integrity
 
 # parcel-bundler cache
+.cache
 .parcel-cache
 
 # Next.js build output
 .next
-out
 
 # Nuxt.js build / generate output
 .nuxt
@@ -186,39 +242,193 @@ public
 tmp/
 temp/
 
-# Logs
-logs
-*.log
+# ==============================================================================
+# SHADOWSEEK SPECIFIC
+# ==============================================================================
 
-# Database files
+# Database files (contain analysis results and potentially sensitive data)
 *.db
 *.sqlite
 *.sqlite3
+instance/shadowseek.db
+instance/*.db
 
-# IDE and editor files
+# Upload directories (may contain user binaries)
+uploads/
+uploads/**
+temp/
+temp/**
+
+# Ghidra project files (contain analysis results)
+ghidra_projects/
+ghidra_projects/**
+!ghidra_projects/.gitkeep
+
+# Ghidra temporary files
+ghidra_temp/
+*.gpr
+*.lock
+*.lock~
+*.rep/
+
+# Analysis results and logs
+logs/
+logs/**
+*.log
+ghidra_bridge_*.log
+shadowseek_*.log
+
+# Temporary analysis files
+analysis_temp/
+decompiled_temp/
+binary_analysis_temp/
+
+# Fuzzing outputs
+fuzzing_results/
+afl_output/
+harnesses/
+
+# AI service cache
+ai_cache/
+llm_cache/
+
+# Task manager state
+task_state/
+task_cache/
+
+# ==============================================================================
+# DEVELOPMENT TOOLS
+# ==============================================================================
+
+# UV package manager
+uv.lock
+
+# IDE files
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
+# JetBrains IDEs
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# Visual Studio Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Vim
+*.swp
+*.swo
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# ==============================================================================
+# OPERATING SYSTEM FILES
+# ==============================================================================
+
+# Windows
 Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
 
-# ShadowSeek specific
-uploads/
-ghidra_projects/
-logs/
-temp/
-*.ghidra*
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
 
-# Ghidra project files
-*.gpr
-*.rep/
-*.lock
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ==============================================================================
+# SECURITY & BACKUP FILES
+# ==============================================================================
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+*.save
+
+# Security scan results
+security_scan_results/
+vulnerability_reports/
+
+# SSL certificates and keys
+*.pem
+*.key
+*.crt
+*.cert
+*.p12
+*.pfx
+
+# GPG keys
+*.gpg
+*.asc
+
+# ==============================================================================
+# EXAMPLE FILES TO KEEP
+# ==============================================================================
+
+# Keep example configuration files
+!.env.example
+!config.example.py
+!settings.example.yml
+!docker-compose.example.yml
+
+# Keep documentation
+!README.md
+!CONTRIBUTING.md
+!LICENSE
+!CHANGELOG.md
+
+# Keep essential scripts
+!setup-shadowseek.py
+!run.py
+!verify_installation.py
+
+# Keep empty directories with .gitkeep
+!**/.gitkeep

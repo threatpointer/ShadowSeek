@@ -15,6 +15,7 @@ import {
   Divider,
   Chip,
   LinearProgress,
+  CircularProgress,
   Select,
   MenuItem,
   FormControl,
@@ -61,10 +62,20 @@ const Configuration: React.FC = () => {
   const [tabValue, setTabValue] = useState(0);
   const [showApiKeys, setShowApiKeys] = useState<{[key: string]: boolean}>({});
   const [testingConnection, setTestingConnection] = useState<{[key: string]: boolean}>({});
+  const [ollamaModels, setOllamaModels] = useState<Array<{ name: string; size_formatted: string }>>([]);
+  const [fetchingOllamaModels, setFetchingOllamaModels] = useState(false);
+  const [ollamaStatus, setOllamaStatus] = useState<{ server_running: boolean; model_status?: string } | null>(null);
 
   useEffect(() => {
     fetchConfiguration();
   }, []);
+
+  // Auto-fetch Ollama models when base URL changes or component loads
+  useEffect(() => {
+    if (config.ollama_base_url) {
+      fetchOllamaModels(config.ollama_base_url);
+    }
+  }, [config.ollama_base_url]);
 
   const fetchConfiguration = async () => {
     try {
@@ -135,6 +146,34 @@ const Configuration: React.FC = () => {
           api_key: config.claude_api_key,
           model: config.claude_model
         };
+      } else if (provider === 'Ollama') {
+        // First check Ollama status
+        try {
+          const statusResponse = await apiClient.getOllamaStatus(
+            config.ollama_base_url, 
+            config.ollama_model
+          );
+          
+          if (statusResponse.success && statusResponse.status) {
+            const status = statusResponse.status;
+            if (status.model_status === 'loading') {
+              toast.warning(`Model '${config.ollama_model}' is still loading. Please wait and try again.`);
+              return;
+            } else if (status.model_status === 'error') {
+              toast.error(`Model error: ${status.model_error || 'Unknown error'}`);
+              return;
+            }
+          }
+        } catch (statusError) {
+          // Continue with test if status check fails
+          console.warn('Status check failed, proceeding with test:', statusError);
+        }
+        
+        testData = {
+          provider: 'ollama',
+          base_url: config.ollama_base_url,
+          model: config.ollama_model
+        };
       }
       
       const response = await apiClient.testAIConnection(testData);
@@ -144,6 +183,26 @@ const Configuration: React.FC = () => {
       toast.error(errorMessage);
     } finally {
       setTestingConnection(prev => ({ ...prev, [provider]: false }));
+    }
+  };
+
+  const fetchOllamaModels = async (baseUrl?: string) => {
+    setFetchingOllamaModels(true);
+    try {
+      const response = await apiClient.getOllamaModels(baseUrl || config.ollama_base_url);
+      if (response.success) {
+        setOllamaModels(response.models);
+        toast.success(`Found ${response.models.length} Ollama models`);
+      } else {
+        toast.error(response.error || 'Failed to fetch Ollama models');
+        setOllamaModels([]);
+      }
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.error || 'Failed to fetch Ollama models';
+      toast.error(errorMessage);
+      setOllamaModels([]);
+    } finally {
+      setFetchingOllamaModels(false);
     }
   };
 
@@ -514,14 +573,65 @@ const Configuration: React.FC = () => {
                     helperText="URL of your Ollama server"
                   />
                   
-                  <TextField
-                    fullWidth
-                    label="Model"
-                    value={config.ollama_model || 'llama2'}
-                    onChange={(e) => handleConfigChange('ollama_model', e.target.value)}
-                    margin="normal"
-                    helperText="e.g. llama2, codellama, mistral, llama3"
-                  />
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end', mt: 2 }}>
+                    <FormControl fullWidth margin="normal">
+                      <InputLabel>Model</InputLabel>
+                      <Select
+                        value={config.ollama_model || ''}
+                        onChange={(e) => handleConfigChange('ollama_model', e.target.value)}
+                        label="Model"
+                      >
+                        {ollamaModels.length > 0 ? (
+                          ollamaModels.map((model) => (
+                            <MenuItem key={model.name} value={model.name}>
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                                <span>{model.name}</span>
+                                <Chip 
+                                  label={model.size_formatted} 
+                                  size="small" 
+                                  variant="outlined"
+                                  sx={{ ml: 1 }}
+                                />
+                              </Box>
+                            </MenuItem>
+                          ))
+                        ) : (
+                          <MenuItem value="" disabled>
+                            {fetchingOllamaModels ? 'Loading models...' : 'No models found - click refresh'}
+                          </MenuItem>
+                        )}
+                      </Select>
+                      <Box sx={{ mt: 0.5, fontSize: '0.75rem', color: 'text.secondary' }}>
+                        {ollamaModels.length > 0 
+                          ? `${ollamaModels.length} models available`
+                          : 'Click refresh to load available models'
+                        }
+                        {config.ollama_model && ollamaStatus?.model_status && (
+                          <Box sx={{ mt: 0.5 }}>
+                            <Chip 
+                              label={`Model: ${ollamaStatus.model_status}`}
+                              size="small"
+                              color={
+                                ollamaStatus.model_status === 'ready' ? 'success' :
+                                ollamaStatus.model_status === 'loading' ? 'warning' : 'error'
+                              }
+                              variant="outlined"
+                            />
+                          </Box>
+                        )}
+                      </Box>
+                    </FormControl>
+                    
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={() => fetchOllamaModels()}
+                      disabled={fetchingOllamaModels}
+                      sx={{ mb: 1, minWidth: 'auto', px: 2 }}
+                    >
+                      {fetchingOllamaModels ? <CircularProgress size={20} /> : <Refresh />}
+                    </Button>
+                  </Box>
 
                   <Box mt={2}>
                     <Button

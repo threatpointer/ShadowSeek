@@ -1,0 +1,2 @@
+# This file ensures empty directories are tracked by Git
+# Used for essential directories that need to exist but may be empty initially
