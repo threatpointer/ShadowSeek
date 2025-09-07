@@ -23,7 +23,6 @@ Welcome to **ShadowSeek** - an enterprise-grade, AI-powered binary security anal
 ### **🔧 For Developers**
 - **[🏗️ System Architecture](../user-docs/architecture/system-architecture.md)** - Technical overview
 - **[🔄 API Examples](../user-docs/examples/api-examples.md)** - Integration examples
-- **[🐛 Troubleshooting](GHIDRA_BRIDGE_TROUBLESHOOTING.md)** - Common issues and fixes
 
 ---
 
@@ -200,8 +199,6 @@ graph TB
 ## 📞 **Getting Help**
 
 ### **Quick References**
-- **[🔧 System Management](QUICK_REFERENCE.md)** - Daily operations and commands
-- **[🚨 Troubleshooting](GHIDRA_BRIDGE_TROUBLESHOOTING.md)** - Common issues and solutions
 - **[📡 API Guide](API_DOCUMENTATION.md)** - Complete REST API documentation
 
 ### **Support Channels**
