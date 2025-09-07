@@ -132,6 +132,15 @@ cd ShadowSeek
 python setup-shadowseek.py
 ```
 
+#### Setup Options
+```bash
+# Common setup options
+python setup-shadowseek.py --auto              # Non-interactive mode
+python setup-shadowseek.py --refresh-env       # Refresh environment variables
+python setup-shadowseek.py --skip-system-check # Skip dependency checks
+python setup-shadowseek.py --force-continue    # Continue with missing deps
+```
+
 ### 2. Access Platform
 - **Main Interface:** http://localhost:3000
 - **API Documentation:** http://localhost:5000/api/docs
