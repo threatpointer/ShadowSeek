@@ -287,6 +287,8 @@ binary_analysis_temp/
 fuzzing_results/
 afl_output/
 harnesses/
+outputs/
+test_input.txt
 
 # AI service cache
 ai_cache/

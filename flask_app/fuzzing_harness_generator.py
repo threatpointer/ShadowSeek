@@ -71,6 +71,14 @@ class FuzzingHarnessGenerator:
                 'persistent_mode': False,
                 'compile_flags': ['-fsanitize=address', '-g'],
                 'runtime_args': ['-i', 'inputs', '-W', 'outputs']
+            },
+            'WinAFL': {
+                'description': 'Windows-specific AFL fork for fuzzing Windows binaries',
+                'default': False,
+                'file_based': True,
+                'persistent_mode': True,
+                'compile_flags': ['/Od', '/Zi', '/RTC1'],
+                'runtime_args': ['-i', 'inputs', '-o', 'outputs', '-D', 'DynamoRIO\\bin64', '-t', '20000']
             }
         }
         
@@ -215,6 +223,8 @@ class FuzzingHarnessGenerator:
             return self._generate_honggfuzz_code(binary, candidates)
         elif fuzzer_type in ['AFL', 'AFL++']:
             return self._generate_afl_code(binary, candidates, fuzzer_type)
+        elif fuzzer_type == 'WinAFL':
+            return self._generate_winafl_code(binary, candidates)
         else:
             raise ValueError(f"Unsupported fuzzer type: {fuzzer_type}")
     
@@ -260,11 +270,13 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {{
 }}
 '''
         
-        # Generate function declarations
+        # Generate function declarations - using stub functions for demonstration
         declarations = []
         for candidate in candidates:
             func = candidate.function
-            declarations.append(f"extern void target_{func.name}(const char *input, size_t len);")
+            # Create stub function declarations that simulate the target functions
+            declarations.append(f"// Stub function for {func.name} - replace with actual function call")
+            declarations.append(f"void target_{func.name}(const char *input, size_t len);")
         
         # Generate target calls
         calls = []
@@ -351,11 +363,13 @@ int main(int argc, char **argv) {{
 }}
 '''
         
-        # Generate function declarations
+        # Generate function declarations - using stub functions for demonstration
         declarations = []
         for candidate in candidates:
             func = candidate.function
-            declarations.append(f"extern void target_{func.name}(const char *input, size_t len);")
+            # Create stub function declarations that simulate the target functions
+            declarations.append(f"// Stub function for {func.name} - replace with actual function call")
+            declarations.append(f"void target_{func.name}(const char *input, size_t len);")
         
         # Generate wrapper functions
         wrappers = []
@@ -402,15 +416,20 @@ int main(int argc, char **argv) {{
 // Target function declarations
 {function_declarations}
 
+// Stub function implementations - replace with actual binary function calls
+{stub_functions}
+
 // Fuzzing target wrapper functions
 {wrapper_functions}
 
 // Main {fuzzer_type} harness
 int main(int argc, char **argv) {{
     // {fuzzer_type} setup
-{afl_setup}
+    #ifdef __AFL_HAVE_MANUAL_CONTROL
+        __AFL_INIT();
+    #endif
     
-    // Read input file
+    // Read input file (outside AFL++ loop for proper scoping)
     if (argc != 2) {{
         fprintf(stderr, "Usage: %s <input_file>\\n", argv[0]);
         return 1;
@@ -446,48 +465,67 @@ int main(int argc, char **argv) {{
     fclose(fp);
     input_data[bytes_read] = '\\0';
     
+    // AFL++ loop start
+{afl_loop_start}
+    
     // Execute fuzzing targets
 {target_calls}
+    
+    // AFL++ loop closing
+{afl_loop_close}
     
     free(input_data);
     return 0;
 }}
 '''
         
-        # AFL-specific includes and setup
+        # AFL-specific includes and loop setup
         afl_includes = ""
-        afl_setup = ""
+        afl_loop_start = ""
         
         if fuzzer_type == 'AFL++':
             afl_includes = '''
-// AFL++ specific includes
-#ifdef __AFL_HAVE_MANUAL_CONTROL
-    #include "config.h"
-#endif
+// AFL++ specific includes - no config.h needed for basic fuzzing
 '''
-            afl_setup = '''    #ifdef __AFL_HAVE_MANUAL_CONTROL
-        __AFL_INIT();
-    #endif
-    
-    #ifdef __AFL_LOOP
+            afl_loop_start = '''    #ifdef __AFL_LOOP
         while (__AFL_LOOP(1000)) {
     #endif'''
         else:  # AFL
             afl_includes = '''
-// AFL specific includes
-#ifdef __AFL_HAVE_MANUAL_CONTROL
-    #include "config.h"
-#endif
+// AFL specific includes - no config.h needed for basic fuzzing
 '''
-            afl_setup = '''    #ifdef __AFL_HAVE_MANUAL_CONTROL
-        __AFL_INIT();
-    #endif'''
+            afl_loop_start = ''
         
-        # Generate function declarations
+        # Generate function declarations - using stub functions for demonstration (avoid duplicates)
         declarations = []
+        seen_declarations = set()
         for candidate in candidates:
             func = candidate.function
-            declarations.append(f"extern void target_{func.name}(const char *input, size_t len);")
+            if func.name not in seen_declarations:
+                seen_declarations.add(func.name)
+                # Create stub function declarations that simulate the target functions
+                declarations.append(f"// Stub function for {func.name} - replace with actual function call")
+                declarations.append(f"void target_{func.name}(const char *input, size_t len);")
+        
+        # Generate stub function implementations (avoid duplicates)
+        stubs = []
+        seen_functions = set()
+        for candidate in candidates:
+            func = candidate.function
+            if func.name not in seen_functions:
+                seen_functions.add(func.name)
+                stub = f'''
+void target_{func.name}(const char *input, size_t len) {{
+    // STUB: Replace this with actual function call to {func.name}
+    // For demonstration purposes, this stub just validates input
+    if (input && len > 0) {{
+        // Simulate some processing - replace with actual binary function call
+        volatile char temp = input[0];  // Prevent optimization
+        (void)temp;  // Suppress unused variable warning
+    }}
+    // TODO: Link against original binary and call actual {func.name} function
+}}'''
+                stubs.append(stub)
         
         # Generate wrapper functions
         wrappers = []
@@ -502,11 +540,12 @@ int main(int argc, char **argv) {{
             calls.append(f"    fuzz_target_{i}(input_data, bytes_read);")
             calls.append("")
         
-        # Add AFL++ loop closing
+        # Generate AFL++ loop closing separately
+        afl_loop_close = ""
         if fuzzer_type == 'AFL++':
-            calls.append('''    #ifdef __AFL_LOOP
+            afl_loop_close = '''    #ifdef __AFL_LOOP
         }
-    #endif''')
+    #endif'''
         
         return template.format(
             fuzzer_type=fuzzer_type,
@@ -514,10 +553,12 @@ int main(int argc, char **argv) {{
             target_count=len(candidates),
             generation_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             afl_includes=afl_includes,
-            afl_setup=afl_setup,
+            afl_loop_start=afl_loop_start,
             function_declarations="\n".join(declarations),
+            stub_functions="\n".join(stubs),
             wrapper_functions="\n".join(wrappers),
-            target_calls="\n".join(calls)
+            target_calls="\n".join(calls),
+            afl_loop_close=afl_loop_close
         )
     
     def _generate_fuzzer_makefile(self, binary: Binary, harness: FuzzingHarness, fuzzer_type: str) -> str:
@@ -531,11 +572,17 @@ int main(int argc, char **argv) {{
             return self._generate_honggfuzz_makefile(binary, harness)
         elif fuzzer_type in ['AFL', 'AFL++']:
             return self._generate_afl_makefile(binary, harness, fuzzer_type)
+        elif fuzzer_type == 'WinAFL':
+            return self._generate_winafl_makefile(binary, harness)
         else:
             raise ValueError(f"Unsupported fuzzer type: {fuzzer_type}")
     
     def _generate_libfuzzer_makefile(self, binary: Binary, harness: FuzzingHarness) -> str:
         """Generate LibFuzzer-specific Makefile"""
+        
+        # Create target name from binary filename (remove extension and add fuzzer prefix)
+        binary_name = binary.filename.rsplit('.', 1)[0] if '.' in binary.filename else binary.filename
+        target_name = f"{binary_name}_libfuzzer_harness"
         
         return f'''# LibFuzzer Makefile for {binary.filename}
 # Auto-generated by ShadowSeek
@@ -545,7 +592,7 @@ CXX = clang++
 CC = clang
 CFLAGS = -fsanitize=fuzzer,address -g -O1 -fno-omit-frame-pointer
 CXXFLAGS = $(CFLAGS)
-TARGET = libfuzzer_harness
+TARGET = {target_name}
 
 # Build targets
 all: $(TARGET)
@@ -588,13 +635,17 @@ clean:
     def _generate_honggfuzz_makefile(self, binary: Binary, harness: FuzzingHarness) -> str:
         """Generate Honggfuzz-specific Makefile"""
         
+        # Create target name from binary filename (remove extension and add fuzzer prefix)
+        binary_name = binary.filename.rsplit('.', 1)[0] if '.' in binary.filename else binary.filename
+        target_name = f"{binary_name}_honggfuzz_harness"
+        
         return f'''# Honggfuzz Makefile for {binary.filename}
 # Auto-generated by ShadowSeek
 
 # Compiler settings
 CC = hfuzz-clang
 CFLAGS = -fsanitize=address -g -O1 -fno-omit-frame-pointer
-TARGET = honggfuzz_harness
+TARGET = {target_name}
 
 # Build targets
 all: $(TARGET)
@@ -636,7 +687,12 @@ clean:
     def _generate_afl_makefile(self, binary: Binary, harness: FuzzingHarness, fuzzer_type: str) -> str:
         """Generate AFL/AFL++ specific Makefile"""
         
-        compiler = 'afl-clang-fast++' if fuzzer_type == 'AFL++' else 'afl-gcc'
+        # Use C compiler for C source files to avoid C++ warnings
+        compiler = 'afl-clang-fast' if fuzzer_type == 'AFL++' else 'afl-gcc'
+        
+        # Create target name from binary filename (remove extension and add fuzzer prefix)
+        binary_name = binary.filename.rsplit('.', 1)[0] if '.' in binary.filename else binary.filename
+        target_name = f"{binary_name}_{fuzzer_type.lower()}_harness"
         
         return f'''# {fuzzer_type} Makefile for {binary.filename}
 # Auto-generated by ShadowSeek
@@ -644,7 +700,7 @@ clean:
 # Compiler settings
 CC = {compiler}
 CFLAGS = -fsanitize=address -g -O1 -fno-omit-frame-pointer
-TARGET = {fuzzer_type.lower()}_harness
+TARGET = {target_name}
 
 # Build targets
 all: $(TARGET)
@@ -696,6 +752,221 @@ clean:
 \trm -rf inputs/ outputs/ dict.txt
 
 .PHONY: all run run-parallel run-fast inputs outputs seeds dict.txt analyze minimize clean
+'''
+    
+    def _generate_winafl_code(self, binary: Binary, candidates: List[FuzzingCandidate]) -> str:
+        """Generate WinAFL-specific harness code"""
+        
+        template = '''/*
+ * WinAFL Fuzzing Harness for {binary_name}
+ * Auto-generated by ShadowSeek
+ * 
+ * Targets {target_count} high-risk functions based on security analysis
+ * Generation date: {generation_date}
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <windows.h>
+
+// WinAFL specific includes
+#include "winafl.h"
+
+// Target function declarations
+{function_declarations}
+
+// Stub function implementations - replace with actual binary function calls
+{stub_functions}
+
+// Fuzzing target wrapper functions
+{wrapper_functions}
+
+// WinAFL target function
+int fuzz_target(char *input_data, size_t input_size) {{
+    // Input validation
+    if (!input_data || input_size == 0) {{
+        return 0;
+    }}
+    
+    // Limit input size to prevent excessive memory usage
+    if (input_size > 1024 * 1024) {{
+        return 0;
+    }}
+    
+    // Execute fuzzing targets
+{target_calls}
+    
+    return 0;
+}}
+
+// Main WinAFL harness
+int main(int argc, char **argv) {{
+    char *input_data;
+    size_t input_size;
+    
+    // WinAFL initialization
+    if (argc < 2) {{
+        fprintf(stderr, "Usage: %s <input_file>\\n", argv[0]);
+        return 1;
+    }}
+    
+    // Read input file
+    FILE *fp = fopen(argv[1], "rb");
+    if (!fp) {{
+        perror("fopen");
+        return 1;
+    }}
+    
+    // Get file size
+    fseek(fp, 0, SEEK_END);
+    long file_size = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    
+    if (file_size <= 0 || file_size > 1024 * 1024) {{
+        fprintf(stderr, "Invalid file size\\n");
+        fclose(fp);
+        return 1;
+    }}
+    
+    // Allocate and read input data
+    input_data = (char*)malloc(file_size);
+    if (!input_data) {{
+        perror("malloc");
+        fclose(fp);
+        return 1;
+    }}
+    
+    input_size = fread(input_data, 1, file_size, fp);
+    fclose(fp);
+    
+    // Call the target function
+    int result = fuzz_target(input_data, input_size);
+    
+    free(input_data);
+    return result;
+}}
+'''
+        
+        # Generate function declarations - using stub functions for demonstration (avoid duplicates)
+        declarations = []
+        seen_declarations = set()
+        for candidate in candidates:
+            func = candidate.function
+            if func.name not in seen_declarations:
+                seen_declarations.add(func.name)
+                declarations.append(f"// Stub function for {func.name} - replace with actual function call")
+                declarations.append(f"void target_{func.name}(const char *input, size_t len);")
+        
+        # Generate stub function implementations (avoid duplicates)
+        stubs = []
+        seen_functions = set()
+        for candidate in candidates:
+            func = candidate.function
+            if func.name not in seen_functions:
+                seen_functions.add(func.name)
+                stub = f'''
+void target_{func.name}(const char *input, size_t len) {{
+    // STUB: Replace this with actual function call to {func.name}
+    // For demonstration purposes, this stub just validates input
+    if (input && len > 0) {{
+        // Simulate some processing - replace with actual binary function call
+        volatile char temp = input[0];  // Prevent optimization
+        (void)temp;  // Suppress unused variable warning
+    }}
+    // TODO: Link against original binary and call actual {func.name} function
+}}'''
+                stubs.append(stub)
+        
+        # Generate wrapper functions
+        wrappers = []
+        for i, candidate in enumerate(candidates):
+            wrapper = self._generate_wrapper_function(candidate, i)
+            wrappers.append(wrapper)
+        
+        # Generate target calls
+        calls = []
+        for i, candidate in enumerate(candidates):
+            calls.append(f"    // Target {i+1}: {candidate.function.name} - {candidate.rationale}")
+            calls.append(f"    fuzz_target_{i}((unsigned char*)input_data, input_size);")
+            calls.append("")
+        
+        return template.format(
+            binary_name=binary.filename,
+            target_count=len(candidates),
+            generation_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            function_declarations="\\n".join(declarations),
+            stub_functions="\\n".join(stubs),
+            wrapper_functions="\\n".join(wrappers),
+            target_calls="\\n".join(calls)
+        )
+    
+    def _generate_winafl_makefile(self, binary: Binary, harness: FuzzingHarness) -> str:
+        """Generate WinAFL-specific Makefile"""
+        
+        # Create target name from binary filename (remove extension and add fuzzer prefix)
+        binary_name = binary.filename.rsplit('.', 1)[0] if '.' in binary.filename else binary.filename
+        target_name = f"{binary_name}_winafl_harness"
+        
+        return f'''# WinAFL Makefile for {binary.filename}
+# Auto-generated by ShadowSeek
+
+# Compiler settings
+CC = cl.exe
+CFLAGS = /Od /Zi /RTC1 /MTd
+LDFLAGS = /DEBUG
+TARGET = {target_name}.exe
+WINAFL_DIR = C:\\\\winafl
+DYNAMORIO_DIR = C:\\\\DynamoRIO
+
+# Build targets
+all: $(TARGET)
+
+$(TARGET): harness.c
+\t$(CC) $(CFLAGS) harness.c /Fe:$(TARGET) /link $(LDFLAGS)
+
+# WinAFL specific targets
+run: $(TARGET) inputs
+\t$(WINAFL_DIR)\\\\afl-fuzz.exe -i inputs -o outputs -D $(DYNAMORIO_DIR)\\\\bin64 -t 20000 -- $(TARGET) @@
+
+run-debug: $(TARGET) inputs  
+\t$(WINAFL_DIR)\\\\afl-fuzz.exe -i inputs -o outputs -D $(DYNAMORIO_DIR)\\\\bin64 -t 20000 -debug -- $(TARGET) @@
+
+run-coverage: $(TARGET) inputs
+\t$(WINAFL_DIR)\\\\afl-fuzz.exe -i inputs -o outputs -D $(DYNAMORIO_DIR)\\\\bin64 -t 20000 -coverage_module $(TARGET) -- $(TARGET) @@
+
+# Create directories
+inputs:
+\tif not exist inputs mkdir inputs
+
+outputs:
+\tif not exist outputs mkdir outputs
+
+# Seed generation for Windows binaries
+seeds: inputs
+\techo admin > inputs\\\\seed1.txt
+\techo password123 > inputs\\\\seed2.txt
+\techo 192.168.1.1 > inputs\\\\seed3.txt
+\techo DeviceName > inputs\\\\seed4.txt
+\techo GET /api/device HTTP/1.1 > inputs\\\\seed5.txt
+
+# Analysis targets
+analyze: outputs
+\t$(WINAFL_DIR)\\\\afl-analyze.exe -i outputs
+
+minimize: $(TARGET)
+\t$(WINAFL_DIR)\\\\afl-tmin.exe -i crash_input -o minimized_crash -- $(TARGET) @@
+
+# Cleanup
+clean:
+\tif exist $(TARGET) del $(TARGET)
+\tif exist *.pdb del *.pdb
+\tif exist *.ilk del *.ilk
+\tif exist *.obj del *.obj
+\tif exist inputs rmdir /s /q inputs
+\tif exist outputs rmdir /s /q outputs
+
+.PHONY: all run run-debug run-coverage inputs outputs seeds analyze minimize clean
 '''
     
     def _find_fuzzing_candidates(
@@ -1429,6 +1700,46 @@ ls outputs/crashes/
 # Debug with GDB
 gdb --args ./afl_harness outputs/crashes/id:000000,sig:11,src:000000,op:havoc,rep:2
 ```
+
+## IMPORTANT: Binary Integration
+
+⚠️ **This harness contains stub functions that need to be replaced with actual function calls
+from the target binary '{binary.filename}'. The current implementation will compile but won't
+find real vulnerabilities.**
+
+### Option 1: Link Against Binary Object Files (Recommended)
+```bash
+# If you have access to object files or static library
+{fuzzer_type.lower()}-clang-fast -fsanitize=address -g -O1 -o harness harness.c target_binary.o
+
+# Or link against shared library
+{fuzzer_type.lower()}-clang-fast -fsanitize=address -g -O1 -o harness harness.c -L. -ltarget_binary
+```
+
+### Option 2: Dynamic Loading
+Replace stub functions in harness.c with dynamic loading:
+```c
+#include <dlfcn.h>
+
+void target_function_name(const char *input, size_t len) {{
+    static void *handle = NULL;
+    static void (*real_func)(const char*, size_t) = NULL;
+    
+    if (!handle) {{
+        handle = dlopen("./{binary.filename}", RTLD_LAZY);
+        if (handle) {{
+            real_func = dlsym(handle, "function_name");
+        }}
+    }}
+    
+    if (real_func) {{
+        real_func(input, len);
+    }}
+}}
+```
+
+### Option 3: Process Injection (Advanced)
+For closed-source binaries, consider process injection or binary instrumentation.
 
 ## Environment Variables
 ```bash

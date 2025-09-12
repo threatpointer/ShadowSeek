@@ -74,7 +74,7 @@ interface FuzzingHarness {
   function_id?: string;
   target_function: string;
   harness_name: string;
-  harness_type: 'AFL' | 'AFL++' | 'LibFuzzer' | 'Honggfuzz';
+  harness_type: 'AFL' | 'AFL++' | 'LibFuzzer' | 'Honggfuzz' | 'WinAFL';
   generation_method: 'AI' | 'Template' | 'Manual';
   status: 'generated' | 'compiled' | 'tested' | 'ready' | 'error';
   ai_analysis?: {
@@ -139,7 +139,7 @@ const FuzzingDashboard: React.FC<FuzzingDashboardProps> = ({ binaryId }) => {
   
   // Filter options
   const statusOptions = ['ready', 'tested', 'compiled', 'generated', 'error'];
-  const harnessTypeOptions = ['AFL++', 'AFL', 'LibFuzzer', 'Honggfuzz'];
+  const harnessTypeOptions = ['AFL++', 'AFL', 'LibFuzzer', 'Honggfuzz', 'WinAFL'];
 
   // Code viewing state
   const [viewingHarness, setViewingHarness] = useState<any>(null);
@@ -365,8 +365,9 @@ const FuzzingDashboard: React.FC<FuzzingDashboardProps> = ({ binaryId }) => {
         return;
       case 'analyzing':
       case 'processing':
-        toast.warning('This binary is currently being analyzed. Please wait for the current analysis to complete before generating fuzzing harnesses.');
-        return;
+        // Allow fuzzing even during analysis - the backend will handle data availability
+        toast.info('Analysis is still running, but proceeding with fuzzing harness generation. The system will use available analysis data.');
+        break;
       case 'failed':
       case 'error':
         toast.error('This binary failed analysis and cannot be used for fuzzing. Try re-uploading the binary.');

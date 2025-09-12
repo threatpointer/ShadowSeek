@@ -157,7 +157,8 @@ const SimpleFuzzingInterface: React.FC<{
     { name: 'AFL++', description: 'Advanced American Fuzzy Lop with additional features' },
     { name: 'AFL', description: 'Classic American Fuzzy Lop fuzzer' },
     { name: 'LibFuzzer', description: 'In-process, coverage-guided fuzzing engine (part of LLVM)' },
-    { name: 'Honggfuzz', description: 'Security oriented fuzzer with powerful analysis options' }
+    { name: 'Honggfuzz', description: 'Security oriented fuzzer with powerful analysis options' },
+    { name: 'WinAFL', description: 'Windows-specific AFL fork for fuzzing Windows binaries' }
   ];
 
   const loadFuzzingHarnesses = useCallback(async () => {
